@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::app::{App, AppMode};
-use crate::ui::menu_bar;
+use crate::ui::{self, menu_bar};
 
 pub fn handle_events(app: &mut App) -> std::io::Result<bool> {
     if event::poll(Duration::from_millis(50))? {
@@ -17,14 +17,8 @@ pub fn handle_events(app: &mut App) -> std::io::Result<bool> {
                 AppMode::SaveConfirm => handle_save_confirm(app, key),
             },
             Event::Mouse(mouse) => {
-                if app.mode == AppMode::Normal {
-                    if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
-                        if mouse.row == 0 {
-                            if let Some(action) = menu_bar::hit_test(mouse.column) {
-                                execute_menu_action(app, action);
-                            }
-                        }
-                    }
+                if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+                    handle_mouse_click(app, mouse.column, mouse.row);
                 }
             }
             _ => {}
@@ -33,87 +27,141 @@ pub fn handle_events(app: &mut App) -> std::io::Result<bool> {
     Ok(app.should_quit)
 }
 
+fn handle_mouse_click(app: &mut App, x: u16, y: u16) {
+    // Check dialog close button first (any non-Normal mode)
+    if app.mode != AppMode::Normal {
+        if let Some(rect) = ui::dialog_close_rect() {
+            if x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height {
+                app.mode = AppMode::Normal;
+                app.input_buffer.clear();
+                return;
+            }
+        }
+    }
+
+    // Menu bar click (row 0) — works in all modes
+    if y == 0 {
+        if let Some(action) = menu_bar::hit_test(x) {
+            // Only execute menu actions in Normal mode
+            if app.mode == AppMode::Normal {
+                execute_menu_action(app, action);
+            }
+        }
+    }
+}
+
 fn handle_normal_mode(app: &mut App, key: KeyEvent) {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let alt = key.modifiers.contains(KeyModifiers::ALT);
+    let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+
     match key.code {
-        KeyCode::Char('q') | KeyCode::Esc => {
+        // === Quit: Ctrl+Q ===
+        KeyCode::Char('q') if ctrl => {
             if app.has_unsaved_changes {
                 app.mode = AppMode::SaveConfirm;
             } else {
                 app.should_quit = true;
             }
         }
-        KeyCode::Char('o') => {
-            app.mode = AppMode::OpenChooseMode;
-        }
-        // Save
-        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            let _ = app.save_files();
-        }
-        // Undo/Redo
-        KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::CONTROL) => app.undo(),
-        KeyCode::Char('y') if key.modifiers.contains(KeyModifiers::CONTROL) => app.redo(),
-        // Navigation
-        KeyCode::Char('n') | KeyCode::F(8) => app.next_diff(),
-        KeyCode::Char('p') | KeyCode::F(7) => app.prev_diff(),
-        KeyCode::Home if key.modifiers.contains(KeyModifiers::CONTROL) => app.first_diff(),
-        KeyCode::End if key.modifiers.contains(KeyModifiers::CONTROL) => app.last_diff(),
-        // Scroll
+
+        // === File operations ===
+        // Open: Ctrl+O, o
+        KeyCode::Char('o') if ctrl => { app.mode = AppMode::OpenChooseMode; }
+        KeyCode::Char('o') => { app.mode = AppMode::OpenChooseMode; }
+        // Save: Ctrl+S
+        KeyCode::Char('s') if ctrl => { let _ = app.save_files(); }
+        // Refresh: F5, Ctrl+R
+        KeyCode::F(5) => refresh_files(app),
+        KeyCode::Char('r') if ctrl => refresh_files(app),
+
+        // === Undo/Redo: Ctrl+Z, Ctrl+Y ===
+        KeyCode::Char('z') if ctrl => app.undo(),
+        KeyCode::Char('y') if ctrl => app.redo(),
+
+        // === Diff navigation (WinMerge compatible) ===
+        // Next diff: F8
+        KeyCode::F(8) if !shift => app.next_diff(),
+        // Prev diff: F7
+        KeyCode::F(7) if !shift => app.prev_diff(),
+        // Next conflict: Shift+F8 (3-way)
+        KeyCode::F(8) if shift => app.next_diff(), // TODO: conflict-only nav
+        // Prev conflict: Shift+F7 (3-way)
+        KeyCode::F(7) if shift => app.prev_diff(), // TODO: conflict-only nav
+        // First diff: Alt+Home
+        KeyCode::Home if alt => app.first_diff(),
+        // Last diff: Alt+End
+        KeyCode::End if alt => app.last_diff(),
+        // Also keep Ctrl+Home/End as alias
+        KeyCode::Home if ctrl => app.first_diff(),
+        KeyCode::End if ctrl => app.last_diff(),
+        // Vim-style: n/p
+        KeyCode::Char('n') => app.next_diff(),
+        KeyCode::Char('p') => app.prev_diff(),
+
+        // === Scroll ===
         KeyCode::Char('j') | KeyCode::Down => app.scroll_down(1),
         KeyCode::Char('k') | KeyCode::Up => app.scroll_up(1),
         KeyCode::PageDown => app.scroll_down(20),
         KeyCode::PageUp => app.scroll_up(20),
-        // Copy operations
-        KeyCode::Right if key.modifiers.contains(KeyModifiers::ALT) => {
-            app.copy_left_to_right();
+        KeyCode::Char('g') => app.scroll_offset = 0, // top
+        KeyCode::Char('G') => {
+            let total = app.total_lines();
+            if total > 0 { app.scroll_offset = total - 1; }
         }
-        KeyCode::Left if key.modifiers.contains(KeyModifiers::ALT) => {
-            app.copy_right_to_left();
-        }
-        KeyCode::Right if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            app.copy_left_to_right_and_next();
-        }
-        KeyCode::Left if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            app.copy_right_to_left_and_next();
-        }
-        // Refresh
-        KeyCode::F(5) => {
-            if app.is_three_way {
-                if let (Some(left), Some(base), Some(right)) =
-                    (app.left_path.clone(), app.base_path.clone(), app.right_path.clone())
-                {
-                    app.open_files_3way(left, base, right);
-                }
-            } else if let (Some(left), Some(right)) =
-                (app.left_path.clone(), app.right_path.clone())
-            {
-                app.open_files(left, right);
-            }
-        }
-        // Options
+
+        // === Copy operations (WinMerge: Alt+Arrow) ===
+        // Copy L→R: Alt+Right
+        KeyCode::Right if alt && !ctrl => app.copy_left_to_right(),
+        // Copy R→L: Alt+Left
+        KeyCode::Left if alt && !ctrl => app.copy_right_to_left(),
+        // Copy L→R + next: Ctrl+Alt+Right
+        KeyCode::Right if ctrl && alt => app.copy_left_to_right_and_next(),
+        // Copy R→L + next: Ctrl+Alt+Left
+        KeyCode::Left if ctrl && alt => app.copy_right_to_left_and_next(),
+        // Copy L→R + next: Ctrl+Right (alias)
+        KeyCode::Right if ctrl => app.copy_left_to_right_and_next(),
+        // Copy R→L + next: Ctrl+Left (alias)
+        KeyCode::Left if ctrl => app.copy_right_to_left_and_next(),
+
+        // === Options ===
+        // Toggle whitespace ignore: F9
         KeyCode::F(9) => app.toggle_ignore_whitespace(),
-        KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            app.toggle_ignore_whitespace();
-        }
-        KeyCode::Char('i') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            app.toggle_ignore_case();
-        }
+        KeyCode::Char('w') if ctrl => app.toggle_ignore_whitespace(),
+        // Toggle case ignore: Ctrl+I
+        KeyCode::Char('i') if ctrl => app.toggle_ignore_case(),
+
         _ => {}
+    }
+}
+
+fn refresh_files(app: &mut App) {
+    if app.is_three_way {
+        if let (Some(left), Some(base), Some(right)) =
+            (app.left_path.clone(), app.base_path.clone(), app.right_path.clone())
+        {
+            app.open_files_3way(left, base, right);
+        }
+    } else if let (Some(left), Some(right)) =
+        (app.left_path.clone(), app.right_path.clone())
+    {
+        app.open_files(left, right);
     }
 }
 
 fn handle_choose_mode(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('2') => {
+            app.is_three_way = false;
             app.mode = AppMode::OpenLeft;
             app.input_buffer.clear();
         }
         KeyCode::Char('3') => {
+            app.is_three_way = true;
             app.mode = AppMode::OpenLeft;
             app.input_buffer.clear();
-            // Mark that we're doing 3-way — OpenLeft → OpenBase → OpenRight
-            app.is_three_way = true;
         }
-        KeyCode::Esc => {
+        KeyCode::Char('q') | KeyCode::Esc => {
             app.mode = AppMode::Normal;
         }
         _ => {}

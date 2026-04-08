@@ -50,7 +50,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
 
     let ws = if app.diff_options.ignore_whitespace { " [WS:ignore]" } else { "" };
     let case = if app.diff_options.ignore_case { " [Case:ignore]" } else { "" };
-    let keys = " [o]pen [n/p]diff [^S]ave [^Z]undo [q]uit";
+    let keys = " ^O:open F7/F8:diff Alt+←→:copy ^S:save ^Z:undo ^Q:quit";
 
     let line = Line::from(vec![
         Span::styled(" ", bg),
