@@ -1,6 +1,7 @@
 mod app;
 mod diff;
 mod events;
+mod file_browser;
 mod models;
 mod ui;
 
