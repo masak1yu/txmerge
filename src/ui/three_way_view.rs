@@ -165,10 +165,10 @@ fn render_line(text: &str, line_no: Option<u32>, bg: Color) -> Line<'static> {
 fn brighten(color: Color) -> Color {
     match color {
         Color::Rgb(r, g, b) => Color::Rgb(
-            r.saturating_add(15),
-            g.saturating_add(15),
-            b.saturating_add(20),
+            r.saturating_add(50),
+            g.saturating_add(25),
+            b.saturating_add(0),
         ),
-        _ => Color::Rgb(50, 50, 70),
+        _ => Color::Rgb(80, 50, 10),
     }
 }

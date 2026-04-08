@@ -16,7 +16,7 @@ const BG_REMOVED: Color = Color::Rgb(50, 20, 20);
 const BG_MODIFIED: Color = Color::Rgb(50, 45, 15);
 const BG_WORD_CHANGED: Color = Color::Rgb(80, 70, 20);
 const FG_LINE_NO: Color = Color::Rgb(100, 100, 100);
-const BG_CURRENT_BLOCK: Color = Color::Rgb(35, 35, 55);
+const BG_CURRENT_BLOCK: Color = Color::Rgb(80, 50, 10);
 const BG_GHOST: Color = Color::Rgb(30, 30, 30);
 
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
@@ -110,7 +110,6 @@ fn render_diff_line(
         LineStatus::Added => (BG_GHOST, BG_ADDED),
         LineStatus::Removed => (BG_REMOVED, BG_GHOST),
         LineStatus::Modified => (BG_MODIFIED, BG_MODIFIED),
-        LineStatus::Moved => (BG_MODIFIED, BG_MODIFIED),
     };
 
     // Overlay current block highlight
@@ -204,9 +203,9 @@ fn render_diff_line(
 fn blend_current(base: Color) -> Color {
     match base {
         Color::Rgb(r, g, b) => Color::Rgb(
-            r.saturating_add(15),
-            g.saturating_add(15),
-            b.saturating_add(25),
+            r.saturating_add(50),
+            g.saturating_add(25),
+            b.saturating_add(0),
         ),
         _ => BG_CURRENT_BLOCK,
     }
