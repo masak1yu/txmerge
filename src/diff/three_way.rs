@@ -238,19 +238,28 @@ fn build_result_lines(
         for j in 0..max_lines {
             let (lt, l_no) = if j < left_count {
                 let idx = block.left_start + j;
-                (left_lines.get(idx).unwrap_or(&"").to_string(), Some(idx as u32 + 1))
+                (
+                    left_lines.get(idx).unwrap_or(&"").to_string(),
+                    Some(idx as u32 + 1),
+                )
             } else {
                 (String::new(), None)
             };
             let (bt, b_no) = if j < base_count {
                 let idx = block.base_start + j;
-                (base_lines.get(idx).unwrap_or(&"").to_string(), Some(idx as u32 + 1))
+                (
+                    base_lines.get(idx).unwrap_or(&"").to_string(),
+                    Some(idx as u32 + 1),
+                )
             } else {
                 (String::new(), None)
             };
             let (rt, r_no) = if j < right_count {
                 let idx = block.right_start + j;
-                (right_lines.get(idx).unwrap_or(&"").to_string(), Some(idx as u32 + 1))
+                (
+                    right_lines.get(idx).unwrap_or(&"").to_string(),
+                    Some(idx as u32 + 1),
+                )
             } else {
                 (String::new(), None)
             };
@@ -304,7 +313,12 @@ mod tests {
         let result = compute_three_way_diff(text, text, text);
         assert_eq!(result.conflict_count, 0);
         assert_eq!(result.diff_positions.len(), 0);
-        assert!(result.lines.iter().all(|l| l.status == ThreeWayStatus::Equal));
+        assert!(
+            result
+                .lines
+                .iter()
+                .all(|l| l.status == ThreeWayStatus::Equal)
+        );
     }
 
     #[test]
@@ -314,7 +328,11 @@ mod tests {
         let right = "a\nb\nc\n";
         let result = compute_three_way_diff(base, left, right);
         assert_eq!(result.conflict_count, 0);
-        let changed: Vec<_> = result.lines.iter().filter(|l| l.status == ThreeWayStatus::LeftChanged).collect();
+        let changed: Vec<_> = result
+            .lines
+            .iter()
+            .filter(|l| l.status == ThreeWayStatus::LeftChanged)
+            .collect();
         assert!(!changed.is_empty());
     }
 
@@ -325,7 +343,11 @@ mod tests {
         let right = "a\nY\nc\n";
         let result = compute_three_way_diff(base, left, right);
         assert_eq!(result.conflict_count, 0);
-        let changed: Vec<_> = result.lines.iter().filter(|l| l.status == ThreeWayStatus::RightChanged).collect();
+        let changed: Vec<_> = result
+            .lines
+            .iter()
+            .filter(|l| l.status == ThreeWayStatus::RightChanged)
+            .collect();
         assert!(!changed.is_empty());
     }
 
@@ -336,7 +358,11 @@ mod tests {
         let right = "a\nX\nc\n";
         let result = compute_three_way_diff(base, left, right);
         assert_eq!(result.conflict_count, 0);
-        let changed: Vec<_> = result.lines.iter().filter(|l| l.status == ThreeWayStatus::BothChanged).collect();
+        let changed: Vec<_> = result
+            .lines
+            .iter()
+            .filter(|l| l.status == ThreeWayStatus::BothChanged)
+            .collect();
         assert!(!changed.is_empty());
     }
 
@@ -347,7 +373,11 @@ mod tests {
         let right = "a\nY\nc\n";
         let result = compute_three_way_diff(base, left, right);
         assert_eq!(result.conflict_count, 1);
-        let conflicts: Vec<_> = result.lines.iter().filter(|l| l.status == ThreeWayStatus::Conflict).collect();
+        let conflicts: Vec<_> = result
+            .lines
+            .iter()
+            .filter(|l| l.status == ThreeWayStatus::Conflict)
+            .collect();
         assert!(!conflicts.is_empty());
     }
 
@@ -358,7 +388,12 @@ mod tests {
         let right = "a\nc\n";
         let result = compute_three_way_diff(base, left, right);
         assert_eq!(result.conflict_count, 0);
-        assert!(result.lines.iter().any(|l| l.status == ThreeWayStatus::LeftChanged));
+        assert!(
+            result
+                .lines
+                .iter()
+                .any(|l| l.status == ThreeWayStatus::LeftChanged)
+        );
     }
 
     #[test]
@@ -368,6 +403,11 @@ mod tests {
         let right = "a\nc\n";
         let result = compute_three_way_diff(base, left, right);
         assert_eq!(result.conflict_count, 0);
-        assert!(result.lines.iter().any(|l| l.status == ThreeWayStatus::RightChanged));
+        assert!(
+            result
+                .lines
+                .iter()
+                .any(|l| l.status == ThreeWayStatus::RightChanged)
+        );
     }
 }

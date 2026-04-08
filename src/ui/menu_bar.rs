@@ -15,37 +15,130 @@ struct MenuItem {
 /// Canonical menu item list — used by both draw() and hit_test()
 fn menu_items() -> Vec<MenuItem> {
     vec![
-        MenuItem { label: " ",    action: None },
-        MenuItem { label: "📂Op", action: Some(MenuAction::Open) },
-        MenuItem { label: " │ ",  action: None },
-        MenuItem { label: "💾Sv", action: Some(MenuAction::Save) },
-        MenuItem { label: " │ ",  action: None },
-        MenuItem { label: "🔄Re", action: Some(MenuAction::Refresh) },
-        MenuItem { label: " │ ",  action: None },
-        MenuItem { label: "⏮",   action: Some(MenuAction::FirstDiff) },
-        MenuItem { label: " ",    action: None },
-        MenuItem { label: "◀",   action: Some(MenuAction::PrevDiff) },
-        MenuItem { label: " ",    action: None },
-        MenuItem { label: "▶",   action: Some(MenuAction::NextDiff) },
-        MenuItem { label: " ",    action: None },
-        MenuItem { label: "⏭",   action: Some(MenuAction::LastDiff) },
-        MenuItem { label: " │ ",  action: None },
-        MenuItem { label: "◁▷",  action: Some(MenuAction::CopyLeftToRight) },
-        MenuItem { label: " ",    action: None },
-        MenuItem { label: "▷◁",  action: Some(MenuAction::CopyRightToLeft) },
-        MenuItem { label: " │ ",  action: None },
-        MenuItem { label: "◁▷+", action: Some(MenuAction::CopyLeftToRightNext) },
-        MenuItem { label: " ",    action: None },
-        MenuItem { label: "▷◁+", action: Some(MenuAction::CopyRightToLeftNext) },
-        MenuItem { label: " │ ",  action: None },
-        MenuItem { label: "⇉",   action: Some(MenuAction::CopyAllLR) },
-        MenuItem { label: " ",    action: None },
-        MenuItem { label: "⇇",   action: Some(MenuAction::CopyAllRL) },
-        MenuItem { label: " │ ",  action: None },
-        MenuItem { label: "␣ws", action: Some(MenuAction::ToggleWhitespace) },
-        MenuItem { label: " ",    action: None },
-        MenuItem { label: "Aa",  action: Some(MenuAction::ToggleCase) },
-        MenuItem { label: " ",    action: None },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "📂Op",
+            action: Some(MenuAction::Open),
+        },
+        MenuItem {
+            label: " │ ",
+            action: None,
+        },
+        MenuItem {
+            label: "💾Sv",
+            action: Some(MenuAction::Save),
+        },
+        MenuItem {
+            label: " │ ",
+            action: None,
+        },
+        MenuItem {
+            label: "🔄Re",
+            action: Some(MenuAction::Refresh),
+        },
+        MenuItem {
+            label: " │ ",
+            action: None,
+        },
+        MenuItem {
+            label: "⏮",
+            action: Some(MenuAction::FirstDiff),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "◀",
+            action: Some(MenuAction::PrevDiff),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "▶",
+            action: Some(MenuAction::NextDiff),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "⏭",
+            action: Some(MenuAction::LastDiff),
+        },
+        MenuItem {
+            label: " │ ",
+            action: None,
+        },
+        MenuItem {
+            label: "◁▷",
+            action: Some(MenuAction::CopyLeftToRight),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "▷◁",
+            action: Some(MenuAction::CopyRightToLeft),
+        },
+        MenuItem {
+            label: " │ ",
+            action: None,
+        },
+        MenuItem {
+            label: "◁▷+",
+            action: Some(MenuAction::CopyLeftToRightNext),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "▷◁+",
+            action: Some(MenuAction::CopyRightToLeftNext),
+        },
+        MenuItem {
+            label: " │ ",
+            action: None,
+        },
+        MenuItem {
+            label: "⇉",
+            action: Some(MenuAction::CopyAllLR),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "⇇",
+            action: Some(MenuAction::CopyAllRL),
+        },
+        MenuItem {
+            label: " │ ",
+            action: None,
+        },
+        MenuItem {
+            label: "␣ws",
+            action: Some(MenuAction::ToggleWhitespace),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "Aa",
+            action: Some(MenuAction::ToggleCase),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
     ]
 }
 
@@ -94,21 +187,41 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             let style = match item.action {
                 None => {
                     // Separator or spacer
-                    if item.label.contains('│') { separator } else { bg }
+                    if item.label.contains('│') {
+                        separator
+                    } else {
+                        bg
+                    }
                 }
                 Some(MenuAction::Save) => {
-                    if app.has_unsaved_changes { toggled_on } else { active }
+                    if app.has_unsaved_changes {
+                        toggled_on
+                    } else {
+                        active
+                    }
                 }
                 Some(MenuAction::ToggleWhitespace) => {
-                    if app.diff_options.ignore_whitespace { toggled_on } else { active }
+                    if app.diff_options.ignore_whitespace {
+                        toggled_on
+                    } else {
+                        active
+                    }
                 }
                 Some(MenuAction::ToggleCase) => {
-                    if app.diff_options.ignore_case { toggled_on } else { active }
+                    if app.diff_options.ignore_case {
+                        toggled_on
+                    } else {
+                        active
+                    }
                 }
                 Some(MenuAction::Open) | Some(MenuAction::Refresh) => active,
                 // Navigation and copy actions depend on having diffs
                 Some(_) => {
-                    if has_diff { active } else { disabled }
+                    if has_diff {
+                        active
+                    } else {
+                        disabled
+                    }
                 }
             };
             Span::styled(item.label, style)

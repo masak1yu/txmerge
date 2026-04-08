@@ -1,10 +1,10 @@
-pub mod menu_bar;
 pub mod diff_view;
-pub mod three_way_view;
+pub mod menu_bar;
 pub mod status_bar;
+pub mod three_way_view;
 
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Direction, Layout, Rect, Flex};
+use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::Span;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
@@ -20,12 +20,14 @@ pub fn dialog_close_rect() -> Option<Rect> {
 
 pub fn draw(f: &mut Frame, app: &App) {
     // Reset close button rect
-    unsafe { DIALOG_CLOSE_RECT = None; }
+    unsafe {
+        DIALOG_CLOSE_RECT = None;
+    }
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),  // menu bar
+            Constraint::Length(1), // menu bar
             Constraint::Min(5),    // diff view
             Constraint::Length(1), // status bar
         ])
@@ -72,23 +74,35 @@ fn draw_close_button(f: &mut Frame, popup_area: Rect) {
 
     let btn = Paragraph::new(Span::styled(
         "[x]",
-        Style::default().fg(Color::Rgb(200, 80, 80)).bg(Color::Rgb(40, 40, 50)),
+        Style::default()
+            .fg(Color::Rgb(200, 80, 80))
+            .bg(Color::Rgb(40, 40, 50)),
     ));
     f.render_widget(btn, btn_rect);
 
-    unsafe { DIALOG_CLOSE_RECT = Some(btn_rect); }
+    unsafe {
+        DIALOG_CLOSE_RECT = Some(btn_rect);
+    }
 }
 
 fn center_popup(area: Rect, width: u16, height: u16) -> Rect {
     let vertical = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(height), Constraint::Min(0)])
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(height),
+            Constraint::Min(0),
+        ])
         .flex(Flex::Center)
         .split(area);
 
     let horizontal = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(0), Constraint::Length(width), Constraint::Min(0)])
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(width),
+            Constraint::Min(0),
+        ])
         .flex(Flex::Center)
         .split(vertical[1]);
 
@@ -116,14 +130,10 @@ fn draw_input_dialog(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(block, popup_area);
     draw_close_button(f, popup_area);
 
-    let input = Paragraph::new(app.input_buffer.as_str())
-        .style(Style::default().fg(Color::White));
+    let input = Paragraph::new(app.input_buffer.as_str()).style(Style::default().fg(Color::White));
     f.render_widget(input, inner);
 
-    f.set_cursor_position((
-        inner.x + app.input_buffer.len() as u16,
-        inner.y,
-    ));
+    f.set_cursor_position((inner.x + app.input_buffer.len() as u16, inner.y));
 }
 
 fn draw_choose_mode_dialog(f: &mut Frame, area: Rect) {
@@ -139,8 +149,8 @@ fn draw_choose_mode_dialog(f: &mut Frame, area: Rect) {
     f.render_widget(block, popup_area);
     draw_close_button(f, popup_area);
 
-    let text = Paragraph::new("[2] 2-way diff  [3] 3-way merge")
-        .style(Style::default().fg(Color::White));
+    let text =
+        Paragraph::new("[2] 2-way diff  [3] 3-way merge").style(Style::default().fg(Color::White));
     f.render_widget(text, inner);
 }
 
@@ -157,7 +167,7 @@ fn draw_save_confirm_dialog(f: &mut Frame, area: Rect) {
     f.render_widget(block, popup_area);
     draw_close_button(f, popup_area);
 
-    let text = Paragraph::new("[s]ave  [d]iscard  [c]ancel")
-        .style(Style::default().fg(Color::White));
+    let text =
+        Paragraph::new("[s]ave  [d]iscard  [c]ancel").style(Style::default().fg(Color::White));
     f.render_widget(text, inner);
 }

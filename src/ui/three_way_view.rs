@@ -27,20 +27,47 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         ])
         .split(area);
 
-    let left_title = app.left_path.as_ref()
-        .map(|p| format!(" {}{} ", if app.has_unsaved_changes { "[*] " } else { "" }, p.display()))
+    let left_title = app
+        .left_path
+        .as_ref()
+        .map(|p| {
+            format!(
+                " {}{} ",
+                if app.has_unsaved_changes { "[*] " } else { "" },
+                p.display()
+            )
+        })
         .unwrap_or_else(|| " (no file) ".to_string());
-    let base_title = app.base_path.as_ref()
+    let base_title = app
+        .base_path
+        .as_ref()
         .map(|p| format!(" {} ", p.display()))
         .unwrap_or_else(|| " (base) ".to_string());
-    let right_title = app.right_path.as_ref()
-        .map(|p| format!(" {}{} ", if app.has_unsaved_changes { "[*] " } else { "" }, p.display()))
+    let right_title = app
+        .right_path
+        .as_ref()
+        .map(|p| {
+            format!(
+                " {}{} ",
+                if app.has_unsaved_changes { "[*] " } else { "" },
+                p.display()
+            )
+        })
         .unwrap_or_else(|| " (no file) ".to_string());
 
     let border_style = Style::default().fg(Color::Rgb(60, 60, 70));
-    let left_block = Block::default().title(left_title).borders(Borders::ALL).border_style(border_style);
-    let base_block = Block::default().title(base_title).borders(Borders::ALL).border_style(border_style);
-    let right_block = Block::default().title(right_title).borders(Borders::ALL).border_style(border_style);
+    let left_block = Block::default()
+        .title(left_title)
+        .borders(Borders::ALL)
+        .border_style(border_style);
+    let base_block = Block::default()
+        .title(base_title)
+        .borders(Borders::ALL)
+        .border_style(border_style);
+    let right_block = Block::default()
+        .title(right_title)
+        .borders(Borders::ALL)
+        .border_style(border_style);
 
     let left_inner = left_block.inner(chunks[0]);
     let base_inner = base_block.inner(chunks[1]);
@@ -64,7 +91,10 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let end = (start + visible_height).min(result.lines.len());
 
     let current_block_start = if app.current_diff >= 0 {
-        result.diff_positions.get(app.current_diff as usize).copied()
+        result
+            .diff_positions
+            .get(app.current_diff as usize)
+            .copied()
     } else {
         None
     };
@@ -95,9 +125,21 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             ThreeWayStatus::Conflict => (BG_CONFLICT, BG_GHOST, BG_CONFLICT),
         };
 
-        let left_bg = if is_current { brighten(left_bg) } else { left_bg };
-        let base_bg = if is_current && line.status != ThreeWayStatus::Equal { brighten(base_bg) } else { base_bg };
-        let right_bg = if is_current { brighten(right_bg) } else { right_bg };
+        let left_bg = if is_current {
+            brighten(left_bg)
+        } else {
+            left_bg
+        };
+        let base_bg = if is_current && line.status != ThreeWayStatus::Equal {
+            brighten(base_bg)
+        } else {
+            base_bg
+        };
+        let right_bg = if is_current {
+            brighten(right_bg)
+        } else {
+            right_bg
+        };
 
         left_lines.push(render_line(&line.left_text, line.left_line_no, left_bg));
         base_lines.push(render_line(&line.base_text, line.base_line_no, base_bg));

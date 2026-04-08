@@ -67,10 +67,16 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
 
         // === File operations ===
         // Open: Ctrl+O, o
-        KeyCode::Char('o') if ctrl => { app.mode = AppMode::OpenChooseMode; }
-        KeyCode::Char('o') => { app.mode = AppMode::OpenChooseMode; }
+        KeyCode::Char('o') if ctrl => {
+            app.mode = AppMode::OpenChooseMode;
+        }
+        KeyCode::Char('o') => {
+            app.mode = AppMode::OpenChooseMode;
+        }
         // Save: Ctrl+S
-        KeyCode::Char('s') if ctrl => { let _ = app.save_files(); }
+        KeyCode::Char('s') if ctrl => {
+            let _ = app.save_files();
+        }
         // Refresh: F5, Ctrl+R
         KeyCode::F(5) => refresh_files(app),
         KeyCode::Char('r') if ctrl => refresh_files(app),
@@ -107,7 +113,9 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Char('g') => app.scroll_offset = 0, // top
         KeyCode::Char('G') => {
             let total = app.total_lines();
-            if total > 0 { app.scroll_offset = total - 1; }
+            if total > 0 {
+                app.scroll_offset = total - 1;
+            }
         }
 
         // === Copy operations (WinMerge: Alt+Arrow) ===
@@ -137,14 +145,14 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
 
 fn refresh_files(app: &mut App) {
     if app.is_three_way {
-        if let (Some(left), Some(base), Some(right)) =
-            (app.left_path.clone(), app.base_path.clone(), app.right_path.clone())
-        {
+        if let (Some(left), Some(base), Some(right)) = (
+            app.left_path.clone(),
+            app.base_path.clone(),
+            app.right_path.clone(),
+        ) {
             app.open_files_3way(left, base, right);
         }
-    } else if let (Some(left), Some(right)) =
-        (app.left_path.clone(), app.right_path.clone())
-    {
+    } else if let (Some(left), Some(right)) = (app.left_path.clone(), app.right_path.clone()) {
         app.open_files(left, right);
     }
 }
@@ -261,9 +269,11 @@ fn execute_menu_action(app: &mut App, action: MenuAction) {
         }
         MenuAction::Refresh => {
             if app.is_three_way {
-                if let (Some(left), Some(base), Some(right)) =
-                    (app.left_path.clone(), app.base_path.clone(), app.right_path.clone())
-                {
+                if let (Some(left), Some(base), Some(right)) = (
+                    app.left_path.clone(),
+                    app.base_path.clone(),
+                    app.right_path.clone(),
+                ) {
                     app.open_files_3way(left, base, right);
                 }
             } else if let (Some(left), Some(right)) =

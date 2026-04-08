@@ -99,7 +99,11 @@ impl App {
     pub fn recompute_diff(&mut self) {
         if self.is_three_way {
             let result = compute_three_way_diff(&self.base_text, &self.left_text, &self.right_text);
-            self.current_diff = if !result.diff_positions.is_empty() { 0 } else { -1 };
+            self.current_diff = if !result.diff_positions.is_empty() {
+                0
+            } else {
+                -1
+            };
             self.three_way_result = Some(result);
             self.diff_result = None;
         } else {
@@ -113,7 +117,10 @@ impl App {
 
     pub fn diff_count(&self) -> u32 {
         if self.is_three_way {
-            self.three_way_result.as_ref().map(|r| r.diff_positions.len() as u32).unwrap_or(0)
+            self.three_way_result
+                .as_ref()
+                .map(|r| r.diff_positions.len() as u32)
+                .unwrap_or(0)
         } else {
             self.diff_result.as_ref().map(|r| r.diff_count).unwrap_or(0)
         }
@@ -121,15 +128,23 @@ impl App {
 
     pub fn total_lines(&self) -> usize {
         if self.is_three_way {
-            self.three_way_result.as_ref().map(|r| r.lines.len()).unwrap_or(0)
+            self.three_way_result
+                .as_ref()
+                .map(|r| r.lines.len())
+                .unwrap_or(0)
         } else {
-            self.diff_result.as_ref().map(|r| r.lines.len()).unwrap_or(0)
+            self.diff_result
+                .as_ref()
+                .map(|r| r.lines.len())
+                .unwrap_or(0)
         }
     }
 
     pub fn next_diff(&mut self) {
         let count = self.diff_count();
-        if count == 0 { return; }
+        if count == 0 {
+            return;
+        }
         let max = count as i32 - 1;
         self.current_diff = (self.current_diff + 1).min(max);
         self.scroll_to_current_diff();
@@ -137,7 +152,9 @@ impl App {
 
     pub fn prev_diff(&mut self) {
         let count = self.diff_count();
-        if count == 0 { return; }
+        if count == 0 {
+            return;
+        }
         self.current_diff = (self.current_diff - 1).max(0);
         self.scroll_to_current_diff();
     }
@@ -196,17 +213,22 @@ impl App {
             fs::write(path, &self.left_text).map_err(|e| format!("Failed to save left: {}", e))?;
         }
         if let Some(ref path) = self.right_path {
-            fs::write(path, &self.right_text).map_err(|e| format!("Failed to save right: {}", e))?;
+            fs::write(path, &self.right_text)
+                .map_err(|e| format!("Failed to save right: {}", e))?;
         }
         self.has_unsaved_changes = false;
         Ok(())
     }
 
     pub fn copy_left_to_right(&mut self) {
-        if self.current_diff < 0 { return; }
+        if self.current_diff < 0 {
+            return;
+        }
         if let Some(ref result) = self.diff_result.clone() {
             let block_idx = self.current_diff as usize;
-            if block_idx >= result.diff_positions.len() { return; }
+            if block_idx >= result.diff_positions.len() {
+                return;
+            }
             self.push_undo();
             self.apply_copy(block_idx, true);
             self.has_unsaved_changes = true;
@@ -214,10 +236,14 @@ impl App {
     }
 
     pub fn copy_right_to_left(&mut self) {
-        if self.current_diff < 0 { return; }
+        if self.current_diff < 0 {
+            return;
+        }
         if let Some(ref result) = self.diff_result.clone() {
             let block_idx = self.current_diff as usize;
-            if block_idx >= result.diff_positions.len() { return; }
+            if block_idx >= result.diff_positions.len() {
+                return;
+            }
             self.push_undo();
             self.apply_copy(block_idx, false);
             self.has_unsaved_changes = true;
@@ -272,12 +298,18 @@ impl App {
     }
 
     fn scroll_to_current_diff(&mut self) {
-        if self.current_diff < 0 { return; }
+        if self.current_diff < 0 {
+            return;
+        }
         let block_idx = self.current_diff as usize;
         let pos = if self.is_three_way {
-            self.three_way_result.as_ref().and_then(|r| r.diff_positions.get(block_idx).copied())
+            self.three_way_result
+                .as_ref()
+                .and_then(|r| r.diff_positions.get(block_idx).copied())
         } else {
-            self.diff_result.as_ref().and_then(|r| r.diff_positions.get(block_idx).copied())
+            self.diff_result
+                .as_ref()
+                .and_then(|r| r.diff_positions.get(block_idx).copied())
         };
         if let Some(p) = pos {
             self.scroll_offset = p.saturating_sub(3);
