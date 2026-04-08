@@ -4,39 +4,44 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-txmerge — TUI diff and merge tool written in Rust. Inspired by WinMerge/WinXMerge, providing side-by-side file comparison in the terminal using ratatui.
+txmerge — TUI diff and merge tool written in Rust. Inspired by WinMerge/WinXMerge, providing side-by-side file comparison and 3-way merge in the terminal using ratatui.
 
 ## Architecture
 
 ```
 src/
-├── main.rs          # Entry point, CLI args (clap)
-├── app.rs           # App state (paths, diff result, scroll, mode)
-├── events.rs        # Key event handling (crossterm)
+├── main.rs              # Entry point, CLI args (clap)
+├── app.rs               # App state (paths, diff, 3-way, undo/redo, save)
+├── events.rs            # Key + mouse event handling, MenuAction dispatch
 ├── ui/
-│   ├── mod.rs       # Layout: menu bar + diff view + status bar
-│   ├── menu_bar.rs  # Unicode icon toolbar
-│   ├── diff_view.rs # Side-by-side diff rendering with word-level highlights
+│   ├── mod.rs           # Layout + dialog overlays (open, save confirm)
+│   ├── menu_bar.rs      # Unicode icon toolbar with mouse hit-test
+│   ├── diff_view.rs     # 2-way side-by-side diff rendering
+│   ├── three_way_view.rs # 3-way merge rendering (Left|Base|Right)
 │   └── status_bar.rs
 ├── diff/
 │   ├── mod.rs
-│   └── engine.rs    # Diff computation using `similar` crate (Myers/Patience)
+│   ├── engine.rs        # 2-way diff (similar crate, Myers/Patience)
+│   └── three_way.rs     # 3-way merge (base↔left, base↔right hunk merge)
 └── models/
-    └── diff_line.rs # DiffLine, DiffResult, LineStatus, WordDiffSegment
+    └── diff_line.rs     # DiffLine, DiffResult, ThreeWayLine, ThreeWayResult
 ```
 
 ## Development
 
 ```bash
-cargo build              # Build
-cargo test               # Run tests (diff engine unit tests)
-cargo run -- <left> <right>  # Compare two files
-cargo run                # Start with blank screen, press 'o' to open files
+cargo build                                    # Build
+cargo test                                     # Run tests (16 tests)
+cargo run -- <left> <right>                    # 2-way diff
+cargo run -- <left> <base> <right>             # 3-way merge
+cargo run                                      # Blank screen, press 'o'
 ```
 
 ## Key Bindings
 
-- `o` — Open files (enter left/right paths)
+- `o` — Open files (choose 2-way or 3-way)
+- `Ctrl+S` — Save files
+- `Ctrl+Z` / `Ctrl+Y` — Undo / Redo
 - `n` / `F8` — Next diff
 - `p` / `F7` — Previous diff
 - `Ctrl+Home` / `Ctrl+End` — First / Last diff
@@ -46,7 +51,7 @@ cargo run                # Start with blank screen, press 'o' to open files
 - `F9` — Toggle whitespace ignore
 - `Ctrl+I` — Toggle case ignore
 - `j/k` or `↑/↓` — Scroll
-- `q` / `Esc` — Quit
+- `q` / `Esc` — Quit (with save confirmation if unsaved)
 
 ## Workflow Best Practices
 

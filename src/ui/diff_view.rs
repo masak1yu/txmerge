@@ -16,7 +16,7 @@ const BG_REMOVED: Color = Color::Rgb(50, 20, 20);
 const BG_MODIFIED: Color = Color::Rgb(50, 45, 15);
 const BG_WORD_CHANGED: Color = Color::Rgb(80, 70, 20);
 const FG_LINE_NO: Color = Color::Rgb(100, 100, 100);
-const BG_CURRENT_BLOCK: Color = Color::Rgb(35, 35, 55);
+const BG_CURRENT_BLOCK: Color = Color::Rgb(80, 50, 10);
 const BG_GHOST: Color = Color::Rgb(30, 30, 30);
 
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
@@ -25,15 +25,16 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(area);
 
+    let unsaved = if app.has_unsaved_changes { "[*] " } else { "" };
     let left_title = app
         .left_path
         .as_ref()
-        .map(|p| p.display().to_string())
+        .map(|p| format!("{}{}", unsaved, p.display()))
         .unwrap_or_else(|| "(no file)".to_string());
     let right_title = app
         .right_path
         .as_ref()
-        .map(|p| p.display().to_string())
+        .map(|p| format!("{}{}", unsaved, p.display()))
         .unwrap_or_else(|| "(no file)".to_string());
 
     let left_block = Block::default()
@@ -100,13 +101,15 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(right_para, right_inner);
 }
 
-fn render_diff_line(line: &crate::models::diff_line::DiffLine, is_current: bool) -> (Line<'static>, Line<'static>) {
+fn render_diff_line(
+    line: &crate::models::diff_line::DiffLine,
+    is_current: bool,
+) -> (Line<'static>, Line<'static>) {
     let (left_bg, right_bg) = match line.status {
         LineStatus::Equal => (BG_EQUAL, BG_EQUAL),
         LineStatus::Added => (BG_GHOST, BG_ADDED),
         LineStatus::Removed => (BG_REMOVED, BG_GHOST),
         LineStatus::Modified => (BG_MODIFIED, BG_MODIFIED),
-        LineStatus::Moved => (BG_MODIFIED, BG_MODIFIED),
     };
 
     // Overlay current block highlight
@@ -139,7 +142,11 @@ fn render_diff_line(line: &crate::models::diff_line::DiffLine, is_current: bool)
             Style::default().fg(FG_LINE_NO).bg(left_bg),
         )];
         for seg in &line.left_word_segments {
-            let bg = if seg.changed { BG_WORD_CHANGED } else { left_bg };
+            let bg = if seg.changed {
+                BG_WORD_CHANGED
+            } else {
+                left_bg
+            };
             let style = Style::default().fg(Color::White).bg(bg);
             let style = if seg.changed {
                 style.add_modifier(Modifier::BOLD)
@@ -151,10 +158,7 @@ fn render_diff_line(line: &crate::models::diff_line::DiffLine, is_current: bool)
         Line::from(spans)
     } else {
         Line::from(vec![
-            Span::styled(
-                left_no,
-                Style::default().fg(FG_LINE_NO).bg(left_bg),
-            ),
+            Span::styled(left_no, Style::default().fg(FG_LINE_NO).bg(left_bg)),
             Span::styled(
                 line.left_text.clone(),
                 Style::default().fg(Color::White).bg(left_bg),
@@ -162,13 +166,18 @@ fn render_diff_line(line: &crate::models::diff_line::DiffLine, is_current: bool)
         ])
     };
 
-    let right_line = if line.status == LineStatus::Modified && !line.right_word_segments.is_empty() {
+    let right_line = if line.status == LineStatus::Modified && !line.right_word_segments.is_empty()
+    {
         let mut spans = vec![Span::styled(
             right_no,
             Style::default().fg(FG_LINE_NO).bg(right_bg),
         )];
         for seg in &line.right_word_segments {
-            let bg = if seg.changed { BG_WORD_CHANGED } else { right_bg };
+            let bg = if seg.changed {
+                BG_WORD_CHANGED
+            } else {
+                right_bg
+            };
             let style = Style::default().fg(Color::White).bg(bg);
             let style = if seg.changed {
                 style.add_modifier(Modifier::BOLD)
@@ -180,10 +189,7 @@ fn render_diff_line(line: &crate::models::diff_line::DiffLine, is_current: bool)
         Line::from(spans)
     } else {
         Line::from(vec![
-            Span::styled(
-                right_no,
-                Style::default().fg(FG_LINE_NO).bg(right_bg),
-            ),
+            Span::styled(right_no, Style::default().fg(FG_LINE_NO).bg(right_bg)),
             Span::styled(
                 line.right_text.clone(),
                 Style::default().fg(Color::White).bg(right_bg),
@@ -197,9 +203,9 @@ fn render_diff_line(line: &crate::models::diff_line::DiffLine, is_current: bool)
 fn blend_current(base: Color) -> Color {
     match base {
         Color::Rgb(r, g, b) => Color::Rgb(
-            r.saturating_add(15),
-            g.saturating_add(15),
-            b.saturating_add(25),
+            r.saturating_add(50),
+            g.saturating_add(25),
+            b.saturating_add(0),
         ),
         _ => BG_CURRENT_BLOCK,
     }

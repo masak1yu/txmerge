@@ -13,18 +13,16 @@ use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
 
 use app::App;
 
 #[derive(Parser)]
 #[command(name = "txmerge", version, about = "TUI diff and merge tool")]
 struct Cli {
-    /// Left file path
-    left: Option<PathBuf>,
-    /// Right file path
-    right: Option<PathBuf>,
+    /// File paths: <left> <right> for 2-way, <left> <base> <right> for 3-way
+    files: Vec<PathBuf>,
 }
 
 fn main() -> io::Result<()> {
@@ -40,8 +38,19 @@ fn main() -> io::Result<()> {
     let mut app = App::new();
 
     // Open files if provided via CLI
-    if let (Some(left), Some(right)) = (cli.left, cli.right) {
-        app.open_files(left, right);
+    match cli.files.len() {
+        2 => {
+            let left = cli.files[0].clone();
+            let right = cli.files[1].clone();
+            app.open_files(left, right);
+        }
+        3 => {
+            let left = cli.files[0].clone();
+            let base = cli.files[1].clone();
+            let right = cli.files[2].clone();
+            app.open_files_3way(left, base, right);
+        }
+        _ => {} // No files — start with blank screen
     }
 
     // Main loop
@@ -59,10 +68,7 @@ fn main() -> io::Result<()> {
     result
 }
 
-fn run_app(
-    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    app: &mut App,
-) -> io::Result<()> {
+fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> io::Result<()> {
     loop {
         terminal.draw(|f| ui::draw(f, app))?;
 
