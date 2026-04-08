@@ -25,15 +25,16 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(area);
 
+    let unsaved = if app.has_unsaved_changes { "[*] " } else { "" };
     let left_title = app
         .left_path
         .as_ref()
-        .map(|p| p.display().to_string())
+        .map(|p| format!("{}{}", unsaved, p.display()))
         .unwrap_or_else(|| "(no file)".to_string());
     let right_title = app
         .right_path
         .as_ref()
-        .map(|p| p.display().to_string())
+        .map(|p| format!("{}{}", unsaved, p.display()))
         .unwrap_or_else(|| "(no file)".to_string());
 
     let left_block = Block::default()
