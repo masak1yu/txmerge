@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(*)",
+      "Write(*)",
+      "NotebookEdit(*)",
+      "Bash",
+      "WebFetch(domain:*)",
+      "WebSearch",
+      "mcp__*"
+    ],
+    "deny": [],
+    "ask": [
+      "Bash(rm *)",
+      "Bash(rmdir *)",
+      "Bash(shred *)",
+      "Bash(unlink *)",
+      "Bash(dd *)",
+      "Bash(mkfs *)",
+      "Bash(fdisk *)",
+      "Bash(chmod *)",
+      "Bash(chown *)",
+      "Bash(git *)",
+      "Bash(npm *)",
+      "Bash(pip *)",
+      "Bash(pip3 *)",
+      "Bash(yarn *)",
+      "Bash(pnpm *)",
+      "Bash(docker *)",
+      "Bash(kubectl *)",
+      "Bash(wget *)",
+      "Bash(kill *)",
+      "Bash(killall *)",
+      "Bash(pkill *)"
+    ]
+  },
+  "respectGitignore": true,
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "80"
+  }
+}
