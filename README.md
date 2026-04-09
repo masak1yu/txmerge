@@ -1,16 +1,18 @@
 # txmerge
 
-A TUI diff and merge tool written in Rust. Inspired by WinMerge, providing side-by-side file comparison and 3-way merge in the terminal.
+A TUI diff and merge tool written in Rust. Inspired by WinMerge/WinXMerge, providing side-by-side file comparison and 3-way merge in the terminal.
 
 ## Features
 
 - **2-way diff** - Side-by-side comparison with word-level highlighting
 - **3-way merge** - Left / Base / Right panel layout with conflict detection
+- **File browser dialog** - Browse directories and select files visually (no path typing)
+- **Save dialog** - Choose save location with directory browser and filename input
 - **WinMerge-compatible shortcuts** - F7/F8 navigation, Alt+Arrow copy operations
-- **Mouse support** - Clickable toolbar icons, dialog close buttons
+- **Mouse support** - Clickable toolbar icons, file browser click selection, dialog close buttons
 - **Copy operations** - Merge changes between files with undo/redo support
-- **File save** - Save merged results back to disk (Ctrl+S)
 - **Diff options** - Ignore whitespace, ignore case
+- **Status messages** - Visual feedback for save, refresh, and other operations
 
 ## Installation
 
@@ -30,6 +32,24 @@ txmerge <left-file> <base-file> <right-file>
 # Interactive mode (press 'o' to open files)
 txmerge
 ```
+
+## Toolbar Icons
+
+```
+📄 📂 💾 🔄 │ |< < > >| │ -> <- │ ->| |<- │ =>> <<= │ ws Aa
+```
+
+| Icon | Action |
+|------|--------|
+| 📄 | New (planned) |
+| 📂 | Open files |
+| 💾 | Save files |
+| 🔄 | Refresh comparison |
+| `|<` `<` `>` `>|` | First / Prev / Next / Last diff |
+| `->` `<-` | Copy left-to-right / right-to-left |
+| `->|` `|<-` | Copy and advance to next diff |
+| `=>>` `<<=` | Copy all |
+| `ws` `Aa` | Toggle whitespace / case ignore |
 
 ## Key Bindings
 
@@ -59,12 +79,33 @@ txmerge
 
 | Key | Action |
 |-----|--------|
-| `o` / `Ctrl+O` | Open files |
-| `Ctrl+S` | Save files |
+| `o` / `Ctrl+O` | Open files (file browser dialog) |
+| `Ctrl+S` | Save files (save dialog) |
 | `F5` / `Ctrl+R` | Refresh comparison |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Y` | Redo |
 | `Ctrl+Q` | Quit |
+
+### File Browser Dialog
+
+| Key | Action |
+|-----|--------|
+| `Up` / `Down` | Navigate entries |
+| `Enter` | Open directory / Select file |
+| `Backspace` | Go to parent directory |
+| `PageUp` / `PageDown` | Scroll by page |
+| `Esc` | Cancel |
+| Click | Select entry, click again to open/select |
+
+### Save Dialog
+
+| Key | Action |
+|-----|--------|
+| `Up` / `Down` | Navigate directories |
+| `Tab` | Enter directory / Copy filename |
+| Type | Input filename |
+| `Enter` | Save to current directory with input filename |
+| `Esc` | Cancel |
 
 ### Options
 

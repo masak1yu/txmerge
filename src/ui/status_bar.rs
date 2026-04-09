@@ -76,14 +76,23 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     };
     let keys = " ^O:open F7/F8:diff Alt+←→:copy ^S:save ^Z:undo ^Q:quit";
 
-    let line = Line::from(vec![
-        Span::styled(" ", bg),
-        Span::styled(diff_info, bg),
-        Span::styled(unsaved, yellow),
-        Span::styled(ws, green),
-        Span::styled(case, green),
-        Span::styled(keys, dim),
-    ]);
+    let status_msg = app.current_status_message().map(|s| s.to_string());
+
+    let line = if let Some(msg) = status_msg {
+        Line::from(vec![
+            Span::styled(" ", bg),
+            Span::styled(msg, green),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled(" ", bg),
+            Span::styled(diff_info, bg),
+            Span::styled(unsaved, yellow),
+            Span::styled(ws, green),
+            Span::styled(case, green),
+            Span::styled(keys, dim),
+        ])
+    };
 
     let bar = Paragraph::new(line);
     f.render_widget(bar, area);

@@ -20,23 +20,31 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "📂Op",
+            label: "📄",
+            action: Some(MenuAction::New),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "📂",
             action: Some(MenuAction::Open),
         },
         MenuItem {
-            label: " │ ",
+            label: " ",
             action: None,
         },
         MenuItem {
-            label: "💾Sv",
+            label: "💾",
             action: Some(MenuAction::Save),
         },
         MenuItem {
-            label: " │ ",
+            label: " ",
             action: None,
         },
         MenuItem {
-            label: "🔄Re",
+            label: "🔄",
             action: Some(MenuAction::Refresh),
         },
         MenuItem {
@@ -44,7 +52,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "⏮",
+            label: "|<",
             action: Some(MenuAction::FirstDiff),
         },
         MenuItem {
@@ -52,7 +60,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "◀",
+            label: "<",
             action: Some(MenuAction::PrevDiff),
         },
         MenuItem {
@@ -60,7 +68,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "▶",
+            label: ">",
             action: Some(MenuAction::NextDiff),
         },
         MenuItem {
@@ -68,7 +76,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "⏭",
+            label: ">|",
             action: Some(MenuAction::LastDiff),
         },
         MenuItem {
@@ -76,7 +84,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "◁▷",
+            label: "->",
             action: Some(MenuAction::CopyLeftToRight),
         },
         MenuItem {
@@ -84,7 +92,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "▷◁",
+            label: "<-",
             action: Some(MenuAction::CopyRightToLeft),
         },
         MenuItem {
@@ -92,7 +100,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "◁▷+",
+            label: "->|",
             action: Some(MenuAction::CopyLeftToRightNext),
         },
         MenuItem {
@@ -100,7 +108,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "▷◁+",
+            label: "|<-",
             action: Some(MenuAction::CopyRightToLeftNext),
         },
         MenuItem {
@@ -108,7 +116,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "⇉",
+            label: "=>>",
             action: Some(MenuAction::CopyAllLR),
         },
         MenuItem {
@@ -116,7 +124,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "⇇",
+            label: "<<=",
             action: Some(MenuAction::CopyAllRL),
         },
         MenuItem {
@@ -124,7 +132,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "␣ws",
+            label: "ws",
             action: Some(MenuAction::ToggleWhitespace),
         },
         MenuItem {
@@ -142,10 +150,11 @@ fn menu_items() -> Vec<MenuItem> {
     ]
 }
 
-/// Compute display width using unicode-width (matches terminal rendering)
+/// Compute display width using ratatui's Span (same calculation as rendering)
 fn display_width(s: &str) -> u16 {
-    use unicode_width::UnicodeWidthStr;
-    s.width() as u16
+    use ratatui::text::Span;
+    let span = Span::raw(s);
+    span.width() as u16
 }
 
 /// Hit test: given column x on row 0, return the MenuAction if any
@@ -214,7 +223,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                         active
                     }
                 }
-                Some(MenuAction::Open) | Some(MenuAction::Refresh) => active,
+                Some(MenuAction::New) | Some(MenuAction::Open) | Some(MenuAction::Refresh) => active,
                 // Navigation and copy actions depend on having diffs
                 Some(_) => {
                     if has_diff {
@@ -231,4 +240,23 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let line = Line::from(spans);
     let bar = Paragraph::new(line).style(bg);
     f.render_widget(bar, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_emoji_display_widths() {
+        let items = menu_items();
+        let mut pos = 0u16;
+        for item in &items {
+            let w = display_width(item.label);
+            eprintln!(
+                "pos={:3} w={} label={:?} action={:?}",
+                pos, w, item.label, item.action
+            );
+            pos += w;
+        }
+    }
 }

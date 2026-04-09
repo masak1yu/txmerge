@@ -1,8 +1,8 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEventKind};
-use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::app::{App, AppMode};
+use crate::file_browser::FileBrowser;
 use crate::ui::{self, menu_bar};
 
 pub fn handle_events(app: &mut App) -> std::io::Result<bool> {
@@ -11,7 +11,10 @@ pub fn handle_events(app: &mut App) -> std::io::Result<bool> {
             Event::Key(key) => match app.mode {
                 AppMode::Normal => handle_normal_mode(app, key),
                 AppMode::OpenLeft | AppMode::OpenRight | AppMode::OpenBase => {
-                    handle_input_mode(app, key)
+                    handle_file_browser_mode(app, key)
+                }
+                AppMode::SaveLeft | AppMode::SaveRight => {
+                    handle_save_browser_mode(app, key)
                 }
                 AppMode::OpenChooseMode => handle_choose_mode(app, key),
                 AppMode::SaveConfirm => handle_save_confirm(app, key),
@@ -33,7 +36,50 @@ fn handle_mouse_click(app: &mut App, x: u16, y: u16) {
         if let Some(rect) = ui::dialog_close_rect() {
             if x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height {
                 app.mode = AppMode::Normal;
-                app.input_buffer.clear();
+                app.file_browser = None;
+                return;
+            }
+        }
+    }
+
+    // File browser list click
+    if matches!(
+        app.mode,
+        AppMode::OpenLeft
+            | AppMode::OpenRight
+            | AppMode::OpenBase
+            | AppMode::SaveLeft
+            | AppMode::SaveRight
+    ) {
+        if let Some(rect) = ui::file_browser_list_rect() {
+            if x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
+            {
+                let row = (y - rect.y) as usize;
+                if let Some(ref mut browser) = app.file_browser {
+                    let clicked_idx = browser.scroll_offset + row;
+                    if clicked_idx < browser.entries.len() {
+                        if browser.selected == clicked_idx {
+                            // Click on already-selected item → enter/select
+                            if browser.is_save_mode() {
+                                let entry = &browser.entries[clicked_idx];
+                                if entry.is_dir {
+                                    browser.enter();
+                                } else {
+                                    // Put filename into input
+                                    browser.filename_input =
+                                        Some(entry.name.clone());
+                                }
+                            } else {
+                                let selected_file = browser.enter();
+                                if let Some(path) = selected_file {
+                                    file_browser_select(app, path);
+                                }
+                            }
+                        } else {
+                            browser.selected = clicked_idx;
+                        }
+                    }
+                }
                 return;
             }
         }
@@ -42,7 +88,6 @@ fn handle_mouse_click(app: &mut App, x: u16, y: u16) {
     // Menu bar click (row 0) — works in all modes
     if y == 0 {
         if let Some(action) = menu_bar::hit_test(x) {
-            // Only execute menu actions in Normal mode
             if app.mode == AppMode::Normal {
                 execute_menu_action(app, action);
             }
@@ -75,7 +120,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         }
         // Save: Ctrl+S
         KeyCode::Char('s') if ctrl => {
-            let _ = app.save_files();
+            app.save_files();
         }
         // Refresh: F5, Ctrl+R
         KeyCode::F(5) => refresh_files(app),
@@ -151,9 +196,11 @@ fn refresh_files(app: &mut App) {
             app.right_path.clone(),
         ) {
             app.open_files_3way(left, base, right);
+            app.set_status("Refreshed");
         }
     } else if let (Some(left), Some(right)) = (app.left_path.clone(), app.right_path.clone()) {
         app.open_files(left, right);
+        app.set_status("Refreshed");
     }
 }
 
@@ -162,12 +209,12 @@ fn handle_choose_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Char('2') => {
             app.is_three_way = false;
             app.mode = AppMode::OpenLeft;
-            app.input_buffer.clear();
+            app.file_browser = Some(FileBrowser::new());
         }
         KeyCode::Char('3') => {
             app.is_three_way = true;
             app.mode = AppMode::OpenLeft;
-            app.input_buffer.clear();
+            app.file_browser = Some(FileBrowser::new());
         }
         KeyCode::Char('q') | KeyCode::Esc => {
             app.mode = AppMode::Normal;
@@ -176,52 +223,181 @@ fn handle_choose_mode(app: &mut App, key: KeyEvent) {
     }
 }
 
-fn handle_input_mode(app: &mut App, key: KeyEvent) {
+/// Handle file selection from the browser (shared by keyboard Enter and mouse click)
+fn file_browser_select(app: &mut App, path: std::path::PathBuf) {
+    match app.mode {
+        AppMode::OpenLeft => {
+            app.left_path = Some(path);
+            app.file_browser = Some(FileBrowser::new());
+            if app.is_three_way {
+                app.mode = AppMode::OpenBase;
+            } else {
+                app.mode = AppMode::OpenRight;
+            }
+        }
+        AppMode::OpenBase => {
+            app.base_path = Some(path);
+            app.file_browser = Some(FileBrowser::new());
+            app.mode = AppMode::OpenRight;
+        }
+        AppMode::OpenRight => {
+            let right = path;
+            app.file_browser = None;
+            app.mode = AppMode::Normal;
+            if app.is_three_way {
+                let left = app.left_path.clone().unwrap();
+                let base = app.base_path.clone().unwrap();
+                app.open_files_3way(left, base, right);
+            } else {
+                let left = app.left_path.clone().unwrap();
+                app.open_files(left, right);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn handle_file_browser_mode(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Esc => {
             app.mode = AppMode::Normal;
-            app.input_buffer.clear();
+            app.file_browser = None;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if let Some(ref mut browser) = app.file_browser {
+                browser.move_up();
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if let Some(ref mut browser) = app.file_browser {
+                browser.move_down();
+            }
+        }
+        KeyCode::PageUp => {
+            if let Some(ref mut browser) = app.file_browser {
+                browser.page_up(15);
+            }
+        }
+        KeyCode::PageDown => {
+            if let Some(ref mut browser) = app.file_browser {
+                browser.page_down(15);
+            }
+        }
+        KeyCode::Backspace => {
+            if let Some(ref mut browser) = app.file_browser {
+                browser.go_parent();
+            }
         }
         KeyCode::Enter => {
-            let path = app.input_buffer.trim().to_string();
-            if !path.is_empty() {
+            let selected_file = app
+                .file_browser
+                .as_mut()
+                .and_then(|browser| browser.enter());
+
+            if let Some(path) = selected_file {
+                file_browser_select(app, path);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn handle_save_browser_mode(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Esc => {
+            app.mode = AppMode::Normal;
+            app.file_browser = None;
+        }
+        KeyCode::Tab => {
+            // Tab switches focus to directory navigation
+            // Navigate into selected directory or put file name in input
+            if let Some(ref mut browser) = app.file_browser {
+                let entry = browser.entries.get(browser.selected).cloned();
+                if let Some(entry) = entry {
+                    if entry.is_dir {
+                        browser.enter();
+                    } else {
+                        browser.filename_input = Some(entry.name.clone());
+                    }
+                }
+            }
+        }
+        KeyCode::Up => {
+            if let Some(ref mut browser) = app.file_browser {
+                browser.move_up();
+            }
+        }
+        KeyCode::Down => {
+            if let Some(ref mut browser) = app.file_browser {
+                browser.move_down();
+            }
+        }
+        KeyCode::PageUp => {
+            if let Some(ref mut browser) = app.file_browser {
+                browser.page_up(15);
+            }
+        }
+        KeyCode::PageDown => {
+            if let Some(ref mut browser) = app.file_browser {
+                browser.page_down(15);
+            }
+        }
+        KeyCode::Enter => {
+            // Save with current filename
+            let save_path = app
+                .file_browser
+                .as_ref()
+                .and_then(|b| b.save_path());
+
+            if let Some(path) = save_path {
                 match app.mode {
-                    AppMode::OpenLeft => {
-                        app.left_path = Some(PathBuf::from(&path));
-                        app.input_buffer.clear();
-                        if app.is_three_way {
-                            app.mode = AppMode::OpenBase;
-                        } else {
-                            app.mode = AppMode::OpenRight;
+                    AppMode::SaveLeft => {
+                        let _ = std::fs::write(&path, &app.left_text);
+                        app.left_path = Some(path);
+                        // Continue to save right
+                        let default_name = app
+                            .right_path
+                            .as_ref()
+                            .and_then(|p| p.file_name())
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        let mut browser = FileBrowser::new_save(&default_name);
+                        if let Some(ref rp) = app.right_path {
+                            if let Some(parent) = rp.parent() {
+                                browser.current_dir = parent.to_path_buf();
+                                browser.read_dir();
+                            }
                         }
+                        app.file_browser = Some(browser);
+                        app.mode = AppMode::SaveRight;
                     }
-                    AppMode::OpenBase => {
-                        app.base_path = Some(PathBuf::from(&path));
-                        app.input_buffer.clear();
-                        app.mode = AppMode::OpenRight;
-                    }
-                    AppMode::OpenRight => {
-                        let right = PathBuf::from(&path);
-                        app.input_buffer.clear();
+                    AppMode::SaveRight => {
+                        let _ = std::fs::write(&path, &app.right_text);
+                        app.right_path = Some(path);
+                        app.file_browser = None;
                         app.mode = AppMode::Normal;
-                        if app.is_three_way {
-                            let left = app.left_path.clone().unwrap();
-                            let base = app.base_path.clone().unwrap();
-                            app.open_files_3way(left, base, right);
-                        } else {
-                            let left = app.left_path.clone().unwrap();
-                            app.open_files(left, right);
-                        }
+                        app.has_unsaved_changes = false;
+                        app.set_status("Saved");
                     }
                     _ => {}
                 }
             }
         }
         KeyCode::Backspace => {
-            app.input_buffer.pop();
+            // Delete last char from filename input
+            if let Some(ref mut browser) = app.file_browser {
+                if let Some(ref mut fname) = browser.filename_input {
+                    fname.pop();
+                }
+            }
         }
         KeyCode::Char(c) => {
-            app.input_buffer.push(c);
+            // Type into filename input
+            if let Some(ref mut browser) = app.file_browser {
+                if let Some(ref mut fname) = browser.filename_input {
+                    fname.push(c);
+                }
+            }
         }
         _ => {}
     }
@@ -230,8 +406,7 @@ fn handle_input_mode(app: &mut App, key: KeyEvent) {
 fn handle_save_confirm(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('s') => {
-            let _ = app.save_files();
-            app.should_quit = true;
+            app.save_files();
         }
         KeyCode::Char('d') => {
             app.should_quit = true;
@@ -245,6 +420,7 @@ fn handle_save_confirm(app: &mut App, key: KeyEvent) {
 
 #[derive(Debug, Clone, Copy)]
 pub enum MenuAction {
+    New,
     Open,
     Refresh,
     FirstDiff,
@@ -264,26 +440,17 @@ pub enum MenuAction {
 
 fn execute_menu_action(app: &mut App, action: MenuAction) {
     match action {
+        MenuAction::New => {
+            // TODO: New file functionality
+        }
         MenuAction::Open => {
             app.mode = AppMode::OpenChooseMode;
         }
         MenuAction::Refresh => {
-            if app.is_three_way {
-                if let (Some(left), Some(base), Some(right)) = (
-                    app.left_path.clone(),
-                    app.base_path.clone(),
-                    app.right_path.clone(),
-                ) {
-                    app.open_files_3way(left, base, right);
-                }
-            } else if let (Some(left), Some(right)) =
-                (app.left_path.clone(), app.right_path.clone())
-            {
-                app.open_files(left, right);
-            }
+            refresh_files(app);
         }
         MenuAction::Save => {
-            let _ = app.save_files();
+            app.save_files();
         }
         MenuAction::FirstDiff => app.first_diff(),
         MenuAction::PrevDiff => app.prev_diff(),

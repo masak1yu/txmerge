@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use crate::diff::engine::{DiffOptions, compute_diff};
 use crate::diff::three_way::compute_three_way_diff;
+use crate::file_browser::FileBrowser;
 use crate::models::diff_line::{DiffResult, LineStatus, ThreeWayResult};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -12,6 +13,8 @@ pub enum AppMode {
     OpenRight,
     OpenBase,
     OpenChooseMode,
+    SaveLeft,
+    SaveRight,
     SaveConfirm,
 }
 
@@ -35,9 +38,10 @@ pub struct App {
     pub right_text: String,
     pub base_text: String,
     pub mode: AppMode,
-    pub input_buffer: String,
+    pub file_browser: Option<FileBrowser>,
     pub should_quit: bool,
     pub has_unsaved_changes: bool,
+    pub status_message: Option<(String, std::time::Instant)>,
     undo_stack: Vec<TextSnapshot>,
     redo_stack: Vec<TextSnapshot>,
 }
@@ -58,9 +62,10 @@ impl App {
             right_text: String::new(),
             base_text: String::new(),
             mode: AppMode::Normal,
-            input_buffer: String::new(),
+            file_browser: None,
             should_quit: false,
             has_unsaved_changes: false,
+            status_message: None,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
         }
@@ -208,16 +213,38 @@ impl App {
         }
     }
 
-    pub fn save_files(&mut self) -> Result<(), String> {
+    pub fn set_status(&mut self, msg: &str) {
+        self.status_message = Some((msg.to_string(), std::time::Instant::now()));
+    }
+
+    /// Returns the status message if it's still fresh (within 3 seconds)
+    pub fn current_status_message(&self) -> Option<&str> {
+        if let Some((ref msg, at)) = self.status_message {
+            if at.elapsed().as_secs() < 3 {
+                return Some(msg.as_str());
+            }
+        }
+        None
+    }
+
+    /// Start save flow — always opens file browser dialog for confirmation.
+    pub fn save_files(&mut self) {
+        let default_name = self
+            .left_path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let mut browser = FileBrowser::new_save(&default_name);
+        // If left_path has a directory, start there
         if let Some(ref path) = self.left_path {
-            fs::write(path, &self.left_text).map_err(|e| format!("Failed to save left: {}", e))?;
+            if let Some(parent) = path.parent() {
+                browser.current_dir = parent.to_path_buf();
+                browser.read_dir();
+            }
         }
-        if let Some(ref path) = self.right_path {
-            fs::write(path, &self.right_text)
-                .map_err(|e| format!("Failed to save right: {}", e))?;
-        }
-        self.has_unsaved_changes = false;
-        Ok(())
+        self.file_browser = Some(browser);
+        self.mode = AppMode::SaveLeft;
     }
 
     pub fn copy_left_to_right(&mut self) {
