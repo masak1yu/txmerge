@@ -1,6 +1,94 @@
-Hello, World!
-This is a test file.
-Line three is the same.
-This line will be removed.
-Another common line.
-The end.
+use std::collections::HashMap;
+use std::io::{self, Read, Write};
+
+/// Configuration for the diff engine.
+pub struct DiffConfig {
+    pub ignore_whitespace: bool,
+    pub ignore_case: bool,
+    pub context_lines: usize,
+}
+
+impl DiffConfig {
+    pub fn new() -> Self {
+        Self {
+            ignore_whitespace: false,
+            ignore_case: false,
+            context_lines: 3,
+        }
+    }
+}
+
+/// Compute the difference between two strings.
+pub fn compute(left: &str, right: &str, config: &DiffConfig) -> Vec<Change> {
+    let left_lines: Vec<&str> = left.lines().collect();
+    let right_lines: Vec<&str> = right.lines().collect();
+
+    let mut changes = Vec::new();
+    let mut i = 0;
+    let mut j = 0;
+
+    while i < left_lines.len() && j < right_lines.len() {
+        if left_lines[i] == right_lines[j] {
+            changes.push(Change::Equal(left_lines[i].to_string()));
+            i += 1;
+            j += 1;
+        } else {
+            changes.push(Change::Modified {
+                old: left_lines[i].to_string(),
+                new: right_lines[j].to_string(),
+            });
+            i += 1;
+            j += 1;
+        }
+    }
+
+    while i < left_lines.len() {
+        changes.push(Change::Removed(left_lines[i].to_string()));
+        i += 1;
+    }
+
+    changes
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Change {
+    Equal(String),
+    Added(String),
+    Removed(String),
+    Modified { old: String, new: String },
+}
+
+fn format_output(changes: &[Change]) -> String {
+    let mut output = String::new();
+    for change in changes {
+        match change {
+            Change::Equal(s) => output.push_str(&format!("  {}\n", s)),
+            Change::Added(s) => output.push_str(&format!("+ {}\n", s)),
+            Change::Removed(s) => output.push_str(&format!("- {}\n", s)),
+            Change::Modified { old, new } => {
+                output.push_str(&format!("- {}\n", old));
+                output.push_str(&format!("+ {}\n", new));
+            }
+        }
+    }
+    output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_equal() {
+        let config = DiffConfig::new();
+        let result = compute("hello\nworld", "hello\nworld", &config);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_added() {
+        let config = DiffConfig::new();
+        let result = compute("hello", "hello\nworld", &config);
+        assert!(result.iter().any(|c| matches!(c, Change::Added(_))));
+    }
+}
