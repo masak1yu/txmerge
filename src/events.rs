@@ -1,7 +1,7 @@
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEventKind};
 use std::time::Duration;
 
-use crate::app::{App, AppMode};
+use crate::app::{App, AppMode, PanelSide};
 use crate::file_browser::FileBrowser;
 use crate::ui::{self, menu_bar};
 
@@ -10,6 +10,7 @@ pub fn handle_events(app: &mut App) -> std::io::Result<bool> {
         match event::read()? {
             Event::Key(key) => match app.mode {
                 AppMode::Normal => handle_normal_mode(app, key),
+                AppMode::Editing => handle_editing_mode(app, key),
                 AppMode::OpenLeft | AppMode::OpenRight | AppMode::OpenBase => {
                     handle_file_browser_mode(app, key)
                 }
@@ -19,11 +20,14 @@ pub fn handle_events(app: &mut App) -> std::io::Result<bool> {
                 AppMode::OpenChooseMode => handle_choose_mode(app, key),
                 AppMode::SaveConfirm => handle_save_confirm(app, key),
             },
-            Event::Mouse(mouse) => {
-                if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+            Event::Mouse(mouse) => match mouse.kind {
+                MouseEventKind::Down(MouseButton::Left) => {
                     handle_mouse_click(app, mouse.column, mouse.row);
                 }
-            }
+                MouseEventKind::ScrollUp => app.scroll_up(3),
+                MouseEventKind::ScrollDown => app.scroll_down(3),
+                _ => {}
+            },
             _ => {}
         }
     }
@@ -31,8 +35,8 @@ pub fn handle_events(app: &mut App) -> std::io::Result<bool> {
 }
 
 fn handle_mouse_click(app: &mut App, x: u16, y: u16) {
-    // Check dialog close button first (any non-Normal mode)
-    if app.mode != AppMode::Normal {
+    // Check dialog close button first (any dialog mode)
+    if !matches!(app.mode, AppMode::Normal | AppMode::Editing) {
         if let Some(rect) = ui::dialog_close_rect() {
             if x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height {
                 app.mode = AppMode::Normal;
@@ -85,6 +89,27 @@ fn handle_mouse_click(app: &mut App, x: u16, y: u16) {
         }
     }
 
+    // Panel click — enter or move edit cursor
+    if matches!(app.mode, AppMode::Normal | AppMode::Editing) {
+        if let Some((panel, display_line, col)) = hit_test_panel(app, x, y) {
+            if app.mode == AppMode::Editing {
+                // Already editing — exit current edit (recomputes diff if dirty),
+                // then re-enter at the new position
+                app.exit_edit_mode();
+                app.enter_edit_mode(panel, display_line, col);
+            } else {
+                app.enter_edit_mode(panel, display_line, col);
+            }
+            return;
+        }
+
+        // Click outside panels while editing → exit edit mode
+        if app.mode == AppMode::Editing {
+            app.exit_edit_mode();
+            // Fall through to menu bar check
+        }
+    }
+
     // Menu bar click (row 0) — works in all modes
     if y == 0 {
         if let Some(action) = menu_bar::hit_test(x) {
@@ -93,6 +118,53 @@ fn handle_mouse_click(app: &mut App, x: u16, y: u16) {
             }
         }
     }
+}
+
+/// Hit-test: check if (x, y) is inside a diff panel. Returns (panel, display_line, col).
+fn hit_test_panel(app: &App, x: u16, y: u16) -> Option<(PanelSide, usize, usize)> {
+    use crate::ui::{diff_view, three_way_view};
+
+    let line_no_width = 5u16;
+
+    if app.is_three_way {
+        for (panel, rect_fn) in [
+            (PanelSide::Left, three_way_view::left_panel_rect as fn() -> Option<ratatui::layout::Rect>),
+            (PanelSide::Base, three_way_view::base_panel_rect as fn() -> Option<ratatui::layout::Rect>),
+            (PanelSide::Right, three_way_view::right_panel_rect as fn() -> Option<ratatui::layout::Rect>),
+        ] {
+            if let Some(rect) = rect_fn() {
+                if x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height {
+                    let row = (y - rect.y) as usize;
+                    let display_line = app.scroll_offset + row;
+                    let col = if x >= rect.x + line_no_width {
+                        (x - rect.x - line_no_width) as usize
+                    } else {
+                        0
+                    };
+                    return Some((panel, display_line, col));
+                }
+            }
+        }
+    } else {
+        for (panel, rect_fn) in [
+            (PanelSide::Left, diff_view::left_panel_rect as fn() -> Option<ratatui::layout::Rect>),
+            (PanelSide::Right, diff_view::right_panel_rect as fn() -> Option<ratatui::layout::Rect>),
+        ] {
+            if let Some(rect) = rect_fn() {
+                if x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height {
+                    let row = (y - rect.y) as usize;
+                    let display_line = app.scroll_offset + row;
+                    let col = if x >= rect.x + line_no_width {
+                        (x - rect.x - line_no_width) as usize
+                    } else {
+                        0
+                    };
+                    return Some((panel, display_line, col));
+                }
+            }
+        }
+    }
+    None
 }
 
 fn handle_normal_mode(app: &mut App, key: KeyEvent) {
@@ -184,39 +256,105 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         // Toggle case ignore: Ctrl+I
         KeyCode::Char('i') if ctrl => app.toggle_ignore_case(),
 
+        // Enter edit mode
+        KeyCode::Char('i') => {
+            // Enter edit mode on left panel at current scroll position
+            let display_line = app.scroll_offset;
+            app.enter_edit_mode(PanelSide::Left, display_line, 0);
+        }
+        KeyCode::Enter => {
+            let display_line = app.scroll_offset;
+            app.enter_edit_mode(PanelSide::Left, display_line, 0);
+        }
+
         _ => {}
     }
 }
 
 fn refresh_files(app: &mut App) {
-    if app.is_three_way {
+    // If in editing mode, commit current edit state first
+    let was_editing = app.mode == AppMode::Editing;
+    if was_editing {
+        app.exit_edit_mode();
+    }
+
+    let editing_dirty = app.has_unsaved_changes
+        || app.edit_state.as_ref().map(|e| e.dirty).unwrap_or(false)
+        || !app.undo_stack_is_empty();
+
+    if editing_dirty {
+        // Unsaved edits exist — recompute diff from in-memory text, never reload from disk
+        app.recompute_diff();
+        app.set_status("Re-diffed (unsaved changes preserved)");
+    } else if app.is_three_way {
         if let (Some(left), Some(base), Some(right)) = (
             app.left_path.clone(),
             app.base_path.clone(),
             app.right_path.clone(),
         ) {
             app.open_files_3way(left, base, right);
-            app.set_status("Refreshed");
+            app.set_status("Refreshed from disk");
         }
     } else if let (Some(left), Some(right)) = (app.left_path.clone(), app.right_path.clone()) {
         app.open_files(left, right);
-        app.set_status("Refreshed");
+        app.set_status("Refreshed from disk");
+    }
+}
+
+fn handle_editing_mode(app: &mut App, key: KeyEvent) {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let alt = key.modifiers.contains(KeyModifiers::ALT);
+
+    match key.code {
+        KeyCode::Esc => app.exit_edit_mode(),
+        KeyCode::Left if !ctrl && !alt => app.edit_move_left(),
+        KeyCode::Right if !ctrl && !alt => app.edit_move_right(),
+        KeyCode::Up => app.edit_move_up(),
+        KeyCode::Down => app.edit_move_down(),
+        KeyCode::Home => app.edit_move_home(),
+        KeyCode::End => app.edit_move_end(),
+        KeyCode::Backspace => app.edit_backspace(),
+        KeyCode::Delete => app.edit_delete(),
+        KeyCode::Enter => app.edit_enter(),
+        KeyCode::Char('z') if ctrl => {
+            app.exit_edit_mode();
+            app.undo();
+        }
+        KeyCode::Char('s') if ctrl => {
+            app.exit_edit_mode();
+            app.save_files();
+        }
+        KeyCode::Char(c) if !ctrl && !alt => app.edit_insert_char(c),
+        _ => {}
     }
 }
 
 fn handle_choose_mode(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('2') => {
-            app.is_three_way = false;
-            app.mode = AppMode::OpenLeft;
-            app.file_browser = Some(FileBrowser::new());
+            if app.new_file_pending {
+                app.new_file_pending = false;
+                app.new_blank(false);
+                app.mode = AppMode::Normal;
+            } else {
+                app.is_three_way = false;
+                app.mode = AppMode::OpenLeft;
+                app.file_browser = Some(FileBrowser::new());
+            }
         }
         KeyCode::Char('3') => {
-            app.is_three_way = true;
-            app.mode = AppMode::OpenLeft;
-            app.file_browser = Some(FileBrowser::new());
+            if app.new_file_pending {
+                app.new_file_pending = false;
+                app.new_blank(true);
+                app.mode = AppMode::Normal;
+            } else {
+                app.is_three_way = true;
+                app.mode = AppMode::OpenLeft;
+                app.file_browser = Some(FileBrowser::new());
+            }
         }
         KeyCode::Char('q') | KeyCode::Esc => {
+            app.new_file_pending = false;
             app.mode = AppMode::Normal;
         }
         _ => {}
@@ -355,19 +493,11 @@ fn handle_save_browser_mode(app: &mut App, key: KeyEvent) {
                         let _ = std::fs::write(&path, &app.left_text);
                         app.left_path = Some(path);
                         // Continue to save right
-                        let default_name = app
-                            .right_path
-                            .as_ref()
-                            .and_then(|p| p.file_name())
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_default();
+                        let (default_name, start_dir) =
+                            App::save_defaults(&app.right_path, "untitled_right.txt");
                         let mut browser = FileBrowser::new_save(&default_name);
-                        if let Some(ref rp) = app.right_path {
-                            if let Some(parent) = rp.parent() {
-                                browser.current_dir = parent.to_path_buf();
-                                browser.read_dir();
-                            }
-                        }
+                        browser.current_dir = start_dir;
+                        browser.read_dir();
                         app.file_browser = Some(browser);
                         app.mode = AppMode::SaveRight;
                     }
@@ -441,7 +571,8 @@ pub enum MenuAction {
 fn execute_menu_action(app: &mut App, action: MenuAction) {
     match action {
         MenuAction::New => {
-            // TODO: New file functionality
+            app.new_file_pending = true;
+            app.mode = AppMode::OpenChooseMode;
         }
         MenuAction::Open => {
             app.mode = AppMode::OpenChooseMode;

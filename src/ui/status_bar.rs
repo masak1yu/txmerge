@@ -4,7 +4,7 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::App;
+use crate::app::{App, AppMode};
 
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let bg = Style::default()
@@ -74,16 +74,36 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     } else {
         ""
     };
-    let keys = " ^O:open F7/F8:diff Alt+←→:copy ^S:save ^Z:undo ^Q:quit";
+    let editing_style = Style::default()
+        .fg(Color::Black)
+        .bg(Color::Rgb(100, 150, 220));
 
     let status_msg = app.current_status_message().map(|s| s.to_string());
 
-    let line = if let Some(msg) = status_msg {
+    let line = if app.mode == AppMode::Editing {
+        let panel_name = app
+            .edit_state
+            .as_ref()
+            .map(|e| format!("{:?}", e.panel))
+            .unwrap_or_default();
+        let pos = app
+            .edit_state
+            .as_ref()
+            .map(|e| format!(" Ln {}, Col {}", e.source_line + 1, e.cursor_col + 1))
+            .unwrap_or_default();
+        Line::from(vec![
+            Span::styled(" -- EDITING -- ", editing_style),
+            Span::styled(format!(" {} ", panel_name), bg),
+            Span::styled(pos, bg),
+            Span::styled("  Esc:exit ^S:save ^Z:undo", dim),
+        ])
+    } else if let Some(msg) = status_msg {
         Line::from(vec![
             Span::styled(" ", bg),
             Span::styled(msg, green),
         ])
     } else {
+        let keys = " ^O:open i:edit F7/F8:diff Alt+←→:copy ^S:save ^Z:undo ^Q:quit";
         Line::from(vec![
             Span::styled(" ", bg),
             Span::styled(diff_info, bg),

@@ -30,6 +30,8 @@ pub fn draw(f: &mut Frame, app: &App) {
         DIALOG_CLOSE_RECT = None;
         FILE_BROWSER_LIST_RECT = None;
     }
+    diff_view::reset_panel_rects();
+    three_way_view::reset_panel_rects();
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -63,7 +65,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         AppMode::SaveConfirm => {
             draw_save_confirm_dialog(f, main_area);
         }
-        AppMode::Normal => {}
+        AppMode::Normal | AppMode::Editing => {}
     }
 
     status_bar::draw(f, app, chunks[2]);

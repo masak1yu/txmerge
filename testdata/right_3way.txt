@@ -1,5 +1,77 @@
-Hello, World!
-This is the RIGHT version.
-Line three is common.
-This line stays the same.
-The end is near.
+use std::collections::HashMap;
+
+/// Application state for the merge tool.
+pub struct App {
+    pub left_text: String,
+    pub right_text: String,
+    pub current_diff: i32,
+    pub scroll_offset: usize,
+    pub has_unsaved_changes: bool,
+    undo_stack: Vec<String>,
+    redo_stack: Vec<String>,
+}
+
+impl App {
+    pub fn new() -> Self {
+        Self {
+            left_text: String::new(),
+            right_text: String::new(),
+            current_diff: -1,
+            scroll_offset: 0,
+            has_unsaved_changes: false,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+        }
+    }
+
+    pub fn next_diff(&mut self) {
+        let count = self.diff_count();
+        if count > 0 && self.current_diff < count as i32 - 1 {
+            self.current_diff += 1;
+        }
+    }
+
+    pub fn prev_diff(&mut self) {
+        if self.current_diff > 0 {
+            self.current_diff -= 1;
+        }
+    }
+
+    fn diff_count(&self) -> u32 {
+        0 // placeholder
+    }
+
+    pub fn scroll_down(&mut self, amount: usize) {
+        self.scroll_offset += amount;
+    }
+
+    pub fn scroll_up(&mut self, amount: usize) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(amount);
+    }
+
+    pub fn undo(&mut self) {
+        if let Some(snapshot) = self.undo_stack.pop() {
+            self.redo_stack.push(self.left_text.clone());
+            self.left_text = snapshot;
+        }
+    }
+
+    pub fn redo(&mut self) {
+        if let Some(snapshot) = self.redo_stack.pop() {
+            self.undo_stack.push(self.left_text.clone());
+            self.left_text = snapshot;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_app() {
+        let app = App::new();
+        assert_eq!(app.current_diff, -1);
+        assert!(!app.has_unsaved_changes);
+    }
+}

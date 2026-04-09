@@ -4,10 +4,31 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 
-use crate::app::App;
+use crate::app::{App, AppMode, PanelSide};
 use crate::models::diff_line::ThreeWayStatus;
 
 const LINE_NO_WIDTH: usize = 5;
+
+static mut LEFT_PANEL_RECT_3W: Option<Rect> = None;
+static mut BASE_PANEL_RECT_3W: Option<Rect> = None;
+static mut RIGHT_PANEL_RECT_3W: Option<Rect> = None;
+
+pub fn left_panel_rect() -> Option<Rect> {
+    unsafe { LEFT_PANEL_RECT_3W }
+}
+pub fn base_panel_rect() -> Option<Rect> {
+    unsafe { BASE_PANEL_RECT_3W }
+}
+pub fn right_panel_rect() -> Option<Rect> {
+    unsafe { RIGHT_PANEL_RECT_3W }
+}
+pub fn reset_panel_rects() {
+    unsafe {
+        LEFT_PANEL_RECT_3W = None;
+        BASE_PANEL_RECT_3W = None;
+        RIGHT_PANEL_RECT_3W = None;
+    }
+}
 
 const BG_EQUAL: Color = Color::Reset;
 const BG_LEFT_CHANGED: Color = Color::Rgb(20, 35, 55);
@@ -76,15 +97,110 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(base_block, chunks[1]);
     f.render_widget(right_block, chunks[2]);
 
-    let result = match app.three_way_result.as_ref() {
-        Some(r) => r,
-        None => {
-            let hint = Paragraph::new("Press 'o' to open files (3-way)")
-                .style(Style::default().fg(Color::Rgb(100, 100, 100)));
-            f.render_widget(hint, left_inner);
-            return;
+    unsafe {
+        LEFT_PANEL_RECT_3W = Some(left_inner);
+        BASE_PANEL_RECT_3W = Some(base_inner);
+        RIGHT_PANEL_RECT_3W = Some(right_inner);
+    }
+
+    // When editing, always use raw text rendering — guarantees input is always visible.
+    let use_raw_text = app.mode == AppMode::Editing
+        || !app.three_way_result.as_ref().map(|r| !r.lines.is_empty()).unwrap_or(false);
+    if use_raw_text {
+        let left_src = app.source_lines(PanelSide::Left);
+        let base_src = app.source_lines(PanelSide::Base);
+        let right_src = app.source_lines(PanelSide::Right);
+        let max_lines = left_src.len().max(base_src.len()).max(right_src.len()).max(1);
+        let visible_height = left_inner.height as usize;
+        let start = app.scroll_offset;
+        let end = (start + visible_height).min(max_lines);
+
+        let edit_info = if app.mode == AppMode::Editing {
+            app.edit_state.as_ref().map(|e| (e.panel, e.source_line, e.cursor_col))
+        } else {
+            None
+        };
+        let edit_live_text = if app.mode == AppMode::Editing {
+            app.edit_current_line_text()
+        } else {
+            None
+        };
+
+        let mut left_lines = Vec::new();
+        let mut base_lines_render = Vec::new();
+        let mut right_lines = Vec::new();
+
+        for i in start..end {
+            let get_text = |panel: PanelSide, src: &[String]| -> String {
+                if let Some((p, sl, _)) = edit_info {
+                    if p == panel && i == sl {
+                        return edit_live_text.clone().unwrap_or_default();
+                    }
+                }
+                src.get(i).cloned().unwrap_or_default()
+            };
+
+            let left_text = get_text(PanelSide::Left, &left_src);
+            let base_text = get_text(PanelSide::Base, &base_src);
+            let right_text = get_text(PanelSide::Right, &right_src);
+
+            let make_line = |src: &[String], text: String| -> Line<'static> {
+                let no = if i < src.len() {
+                    format!("{:>4} ", i + 1)
+                } else {
+                    "     ".to_string()
+                };
+                Line::from(vec![
+                    Span::styled(no, Style::default().fg(Color::Rgb(100, 100, 120)).bg(BG_EQUAL)),
+                    Span::styled(text, Style::default().fg(Color::White).bg(BG_EQUAL)),
+                ])
+            };
+
+            left_lines.push(make_line(&left_src, left_text));
+            base_lines_render.push(make_line(&base_src, base_text));
+            right_lines.push(make_line(&right_src, right_text));
         }
-    };
+
+        // Show hint if all panels are empty
+        if app.left_text.is_empty() && app.base_text.is_empty() && app.right_text.is_empty()
+            && app.mode != AppMode::Editing
+        {
+            left_lines.clear();
+            left_lines.push(Line::from(vec![
+                Span::styled("   1 ", Style::default().fg(Color::Rgb(100, 100, 120)).bg(BG_EQUAL)),
+                Span::styled("Press 'o' or click to edit", Style::default().fg(Color::Rgb(100, 100, 100)).bg(BG_EQUAL)),
+            ]));
+        }
+
+        f.render_widget(Paragraph::new(left_lines), left_inner);
+        f.render_widget(Paragraph::new(base_lines_render), base_inner);
+        f.render_widget(Paragraph::new(right_lines), right_inner);
+
+        // Cursor
+        if let Some((panel, source_line, cursor_col)) = edit_info {
+            let panel_rect = match panel {
+                PanelSide::Left => left_inner,
+                PanelSide::Base => base_inner,
+                PanelSide::Right => right_inner,
+            };
+            let row_on_screen = source_line.saturating_sub(app.scroll_offset);
+            if (row_on_screen as u16) < panel_rect.height {
+                let display_col = if let Some(ref live) = edit_live_text {
+                    use unicode_width::UnicodeWidthStr;
+                    let prefix: String = live.chars().take(cursor_col).collect();
+                    prefix.width()
+                } else {
+                    cursor_col
+                };
+                let x = panel_rect.x + LINE_NO_WIDTH as u16 + display_col as u16;
+                let y = panel_rect.y + row_on_screen as u16;
+                f.set_cursor_position((x.min(panel_rect.x + panel_rect.width - 1), y));
+            }
+        }
+        return;
+    }
+
+    let result = app.three_way_result.as_ref().unwrap();
 
     let visible_height = left_inner.height as usize;
     let start = app.scroll_offset;
@@ -149,6 +265,40 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(left_lines), left_inner);
     f.render_widget(Paragraph::new(base_lines), base_inner);
     f.render_widget(Paragraph::new(right_lines), right_inner);
+
+    // Render cursor if editing — find display row from source_line + panel
+    if app.mode == AppMode::Editing {
+        if let Some(ref es) = app.edit_state {
+            let panel_rect = match es.panel {
+                PanelSide::Left => left_inner,
+                PanelSide::Right => right_inner,
+                PanelSide::Base => base_inner,
+            };
+            let edit_display_idx = result.lines.iter().position(|dl| {
+                let ln = match es.panel {
+                    PanelSide::Left => dl.left_line_no,
+                    PanelSide::Right => dl.right_line_no,
+                    PanelSide::Base => dl.base_line_no,
+                };
+                ln.map(|n| n as usize - 1) == Some(es.source_line)
+            });
+            let row_on_screen = edit_display_idx
+                .unwrap_or(es.source_line)
+                .saturating_sub(app.scroll_offset);
+            if (row_on_screen as u16) < panel_rect.height {
+                let display_col = if let Some(live) = app.edit_current_line_text() {
+                    use unicode_width::UnicodeWidthStr;
+                    let prefix: String = live.chars().take(es.cursor_col).collect();
+                    prefix.width()
+                } else {
+                    es.cursor_col
+                };
+                let x = panel_rect.x + LINE_NO_WIDTH as u16 + display_col as u16;
+                let y = panel_rect.y + row_on_screen as u16;
+                f.set_cursor_position((x.min(panel_rect.x + panel_rect.width - 1), y));
+            }
+        }
+    }
 }
 
 fn render_line(text: &str, line_no: Option<u32>, bg: Color) -> Line<'static> {
