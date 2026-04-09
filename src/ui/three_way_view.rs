@@ -39,6 +39,7 @@ const BG_GHOST: Color = Color::Rgb(30, 30, 30);
 const FG_LINE_NO: Color = Color::Rgb(100, 100, 100);
 
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
+    let tab = app.active_tab();
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -48,29 +49,29 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         ])
         .split(area);
 
-    let left_title = app
+    let left_title = tab
         .left_path
         .as_ref()
         .map(|p| {
             format!(
                 " {}{} ",
-                if app.has_unsaved_changes { "[*] " } else { "" },
+                if tab.has_unsaved_changes { "[*] " } else { "" },
                 p.display()
             )
         })
         .unwrap_or_else(|| " (no file) ".to_string());
-    let base_title = app
+    let base_title = tab
         .base_path
         .as_ref()
         .map(|p| format!(" {} ", p.display()))
         .unwrap_or_else(|| " (base) ".to_string());
-    let right_title = app
+    let right_title = tab
         .right_path
         .as_ref()
         .map(|p| {
             format!(
                 " {}{} ",
-                if app.has_unsaved_changes { "[*] " } else { "" },
+                if tab.has_unsaved_changes { "[*] " } else { "" },
                 p.display()
             )
         })
@@ -103,25 +104,35 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         RIGHT_PANEL_RECT_3W = Some(right_inner);
     }
 
-    // When editing, always use raw text rendering — guarantees input is always visible.
+    // When editing, always use raw text rendering
     let use_raw_text = app.mode == AppMode::Editing
-        || !app.three_way_result.as_ref().map(|r| !r.lines.is_empty()).unwrap_or(false);
+        || !tab
+            .three_way_result
+            .as_ref()
+            .map(|r| !r.lines.is_empty())
+            .unwrap_or(false);
     if use_raw_text {
-        let left_src = app.source_lines(PanelSide::Left);
-        let base_src = app.source_lines(PanelSide::Base);
-        let right_src = app.source_lines(PanelSide::Right);
-        let max_lines = left_src.len().max(base_src.len()).max(right_src.len()).max(1);
+        let left_src = tab.source_lines(PanelSide::Left);
+        let base_src = tab.source_lines(PanelSide::Base);
+        let right_src = tab.source_lines(PanelSide::Right);
+        let max_lines = left_src
+            .len()
+            .max(base_src.len())
+            .max(right_src.len())
+            .max(1);
         let visible_height = left_inner.height as usize;
-        let start = app.scroll_offset;
+        let start = tab.scroll_offset;
         let end = (start + visible_height).min(max_lines);
 
         let edit_info = if app.mode == AppMode::Editing {
-            app.edit_state.as_ref().map(|e| (e.panel, e.source_line, e.cursor_col))
+            tab.edit_state
+                .as_ref()
+                .map(|e| (e.panel, e.source_line, e.cursor_col))
         } else {
             None
         };
         let edit_live_text = if app.mode == AppMode::Editing {
-            app.edit_current_line_text()
+            tab.edit_current_line_text()
         } else {
             None
         };
@@ -151,7 +162,10 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                     "     ".to_string()
                 };
                 Line::from(vec![
-                    Span::styled(no, Style::default().fg(Color::Rgb(100, 100, 120)).bg(BG_EQUAL)),
+                    Span::styled(
+                        no,
+                        Style::default().fg(Color::Rgb(100, 100, 120)).bg(BG_EQUAL),
+                    ),
                     Span::styled(text, Style::default().fg(Color::White).bg(BG_EQUAL)),
                 ])
             };
@@ -162,13 +176,21 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         }
 
         // Show hint if all panels are empty
-        if app.left_text.is_empty() && app.base_text.is_empty() && app.right_text.is_empty()
+        if tab.left_text.is_empty()
+            && tab.base_text.is_empty()
+            && tab.right_text.is_empty()
             && app.mode != AppMode::Editing
         {
             left_lines.clear();
             left_lines.push(Line::from(vec![
-                Span::styled("   1 ", Style::default().fg(Color::Rgb(100, 100, 120)).bg(BG_EQUAL)),
-                Span::styled("Press 'o' or click to edit", Style::default().fg(Color::Rgb(100, 100, 100)).bg(BG_EQUAL)),
+                Span::styled(
+                    "   1 ",
+                    Style::default().fg(Color::Rgb(100, 100, 120)).bg(BG_EQUAL),
+                ),
+                Span::styled(
+                    "Press 'o' or click to edit",
+                    Style::default().fg(Color::Rgb(100, 100, 100)).bg(BG_EQUAL),
+                ),
             ]));
         }
 
@@ -183,7 +205,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                 PanelSide::Base => base_inner,
                 PanelSide::Right => right_inner,
             };
-            let row_on_screen = source_line.saturating_sub(app.scroll_offset);
+            let row_on_screen = source_line.saturating_sub(tab.scroll_offset);
             if (row_on_screen as u16) < panel_rect.height {
                 let display_col = if let Some(ref live) = edit_live_text {
                     use unicode_width::UnicodeWidthStr;
@@ -200,16 +222,16 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    let result = app.three_way_result.as_ref().unwrap();
+    let result = tab.three_way_result.as_ref().unwrap();
 
     let visible_height = left_inner.height as usize;
-    let start = app.scroll_offset;
+    let start = tab.scroll_offset;
     let end = (start + visible_height).min(result.lines.len());
 
-    let current_block_start = if app.current_diff >= 0 {
+    let current_block_start = if tab.current_diff >= 0 {
         result
             .diff_positions
-            .get(app.current_diff as usize)
+            .get(tab.current_diff as usize)
             .copied()
     } else {
         None
@@ -266,9 +288,9 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(base_lines), base_inner);
     f.render_widget(Paragraph::new(right_lines), right_inner);
 
-    // Render cursor if editing — find display row from source_line + panel
+    // Render cursor if editing
     if app.mode == AppMode::Editing {
-        if let Some(ref es) = app.edit_state {
+        if let Some(ref es) = tab.edit_state {
             let panel_rect = match es.panel {
                 PanelSide::Left => left_inner,
                 PanelSide::Right => right_inner,
@@ -284,9 +306,9 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             });
             let row_on_screen = edit_display_idx
                 .unwrap_or(es.source_line)
-                .saturating_sub(app.scroll_offset);
+                .saturating_sub(tab.scroll_offset);
             if (row_on_screen as u16) < panel_rect.height {
-                let display_col = if let Some(live) = app.edit_current_line_text() {
+                let display_col = if let Some(live) = tab.edit_current_line_text() {
                     use unicode_width::UnicodeWidthStr;
                     let prefix: String = live.chars().take(es.cursor_col).collect();
                     prefix.width()

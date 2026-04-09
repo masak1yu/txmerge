@@ -39,18 +39,19 @@ const BG_CURRENT_BLOCK: Color = Color::Rgb(80, 50, 10);
 const BG_GHOST: Color = Color::Rgb(30, 30, 30);
 
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
+    let tab = app.active_tab();
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(area);
 
-    let unsaved = if app.has_unsaved_changes { "[*] " } else { "" };
-    let left_title = app
+    let unsaved = if tab.has_unsaved_changes { "[*] " } else { "" };
+    let left_title = tab
         .left_path
         .as_ref()
         .map(|p| format!("{}{}", unsaved, p.display()))
         .unwrap_or_else(|| "(no file)".to_string());
-    let right_title = app
+    let right_title = tab
         .right_path
         .as_ref()
         .map(|p| format!("{}{}", unsaved, p.display()))
@@ -79,23 +80,29 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     // When editing, always use raw text rendering — guarantees input is always visible.
     // Diff coloring is only shown when not editing (same as WinMerge pattern).
     let use_raw_text = app.mode == AppMode::Editing
-        || !app.diff_result.as_ref().map(|r| !r.lines.is_empty()).unwrap_or(false);
+        || !tab
+            .diff_result
+            .as_ref()
+            .map(|r| !r.lines.is_empty())
+            .unwrap_or(false);
     if use_raw_text {
         // No diff result — render raw source text with line numbers (same layout as diff view)
-        let left_src = app.source_lines(PanelSide::Left);
-        let right_src = app.source_lines(PanelSide::Right);
+        let left_src = tab.source_lines(PanelSide::Left);
+        let right_src = tab.source_lines(PanelSide::Right);
         let max_lines = left_src.len().max(right_src.len()).max(1);
         let visible_height = left_inner.height as usize;
-        let start = app.scroll_offset;
+        let start = tab.scroll_offset;
         let end = (start + visible_height).min(max_lines);
 
         let edit_info = if app.mode == AppMode::Editing {
-            app.edit_state.as_ref().map(|e| (e.panel, e.source_line, e.cursor_col))
+            tab.edit_state
+                .as_ref()
+                .map(|e| (e.panel, e.source_line, e.cursor_col))
         } else {
             None
         };
         let edit_live_text = if app.mode == AppMode::Editing {
-            app.edit_current_line_text()
+            tab.edit_current_line_text()
         } else {
             None
         };
@@ -104,12 +111,20 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         let mut right_lines = Vec::new();
         for i in start..end {
             let left_text = if let Some((PanelSide::Left, sl, _)) = edit_info {
-                if i == sl { edit_live_text.clone().unwrap_or_default() } else { left_src.get(i).cloned().unwrap_or_default() }
+                if i == sl {
+                    edit_live_text.clone().unwrap_or_default()
+                } else {
+                    left_src.get(i).cloned().unwrap_or_default()
+                }
             } else {
                 left_src.get(i).cloned().unwrap_or_default()
             };
             let right_text = if let Some((PanelSide::Right, sl, _)) = edit_info {
-                if i == sl { edit_live_text.clone().unwrap_or_default() } else { right_src.get(i).cloned().unwrap_or_default() }
+                if i == sl {
+                    edit_live_text.clone().unwrap_or_default()
+                } else {
+                    right_src.get(i).cloned().unwrap_or_default()
+                }
             } else {
                 right_src.get(i).cloned().unwrap_or_default()
             };
@@ -125,21 +140,33 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                 "     ".to_string()
             };
             left_lines.push(Line::from(vec![
-                Span::styled(left_no, Style::default().fg(Color::Rgb(100, 100, 120)).bg(BG_EQUAL)),
+                Span::styled(
+                    left_no,
+                    Style::default().fg(Color::Rgb(100, 100, 120)).bg(BG_EQUAL),
+                ),
                 Span::styled(left_text, Style::default().fg(Color::White).bg(BG_EQUAL)),
             ]));
             right_lines.push(Line::from(vec![
-                Span::styled(right_no, Style::default().fg(Color::Rgb(100, 100, 120)).bg(BG_EQUAL)),
+                Span::styled(
+                    right_no,
+                    Style::default().fg(Color::Rgb(100, 100, 120)).bg(BG_EQUAL),
+                ),
                 Span::styled(right_text, Style::default().fg(Color::White).bg(BG_EQUAL)),
             ]));
         }
 
         // Show hint on first line if both panels are empty
-        if app.left_text.is_empty() && app.right_text.is_empty() && app.mode != AppMode::Editing {
+        if tab.left_text.is_empty() && tab.right_text.is_empty() && app.mode != AppMode::Editing {
             left_lines.clear();
             left_lines.push(Line::from(vec![
-                Span::styled("   1 ", Style::default().fg(Color::Rgb(100, 100, 120)).bg(BG_EQUAL)),
-                Span::styled("Press 'o' to open files, or click to edit", Style::default().fg(Color::Rgb(100, 100, 100)).bg(BG_EQUAL)),
+                Span::styled(
+                    "   1 ",
+                    Style::default().fg(Color::Rgb(100, 100, 120)).bg(BG_EQUAL),
+                ),
+                Span::styled(
+                    "Press 'o' to open files, or click to edit",
+                    Style::default().fg(Color::Rgb(100, 100, 100)).bg(BG_EQUAL),
+                ),
             ]));
         }
 
@@ -153,7 +180,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                 PanelSide::Right => right_inner,
                 _ => left_inner,
             };
-            let row_on_screen = source_line.saturating_sub(app.scroll_offset);
+            let row_on_screen = source_line.saturating_sub(tab.scroll_offset);
             if (row_on_screen as u16) < panel_rect.height {
                 let display_col = if let Some(ref live) = edit_live_text {
                     use unicode_width::UnicodeWidthStr;
@@ -170,16 +197,16 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    let result = app.diff_result.as_ref().unwrap();
+    let result = tab.diff_result.as_ref().unwrap();
     let visible_height = left_inner.height as usize;
-    let start = app.scroll_offset;
+    let start = tab.scroll_offset;
     let end = (start + visible_height).min(result.lines.len());
 
     // Determine which diff block each line belongs to
-    let current_block_start = if app.current_diff >= 0 {
+    let current_block_start = if tab.current_diff >= 0 {
         result
             .diff_positions
-            .get(app.current_diff as usize)
+            .get(tab.current_diff as usize)
             .copied()
     } else {
         None
@@ -197,12 +224,14 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
 
     // Get edit state info if editing
     let edit_info = if app.mode == AppMode::Editing {
-        app.edit_state.as_ref().map(|e| (e.panel, e.source_line, e.display_line, e.cursor_col))
+        tab.edit_state
+            .as_ref()
+            .map(|e| (e.panel, e.source_line, e.display_line, e.cursor_col))
     } else {
         None
     };
     let edit_live_text = if app.mode == AppMode::Editing {
-        app.edit_current_line_text()
+        tab.edit_current_line_text()
     } else {
         None
     };
@@ -215,7 +244,6 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         };
 
         // Check if this display line matches the editing line.
-        // Primary: match by source line_no. Fallback: match by display_line (for ghost lines).
         let is_edit_line = if let Some((panel, source_line, display_line, _)) = edit_info {
             let line_no = match panel {
                 PanelSide::Left => line.left_line_no,
@@ -225,23 +253,21 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             if let Some(n) = line_no {
                 n as usize - 1 == source_line
             } else {
-                // Ghost line — fall back to display_line match
                 i == display_line
             }
         } else {
             false
         };
 
-        let (left_span_line, right_span_line) =
-            if is_edit_line {
-                if let (Some((panel, _, _, _)), Some(live)) = (edit_info, &edit_live_text) {
-                    render_diff_line_with_live(line, is_current, panel, live)
-                } else {
-                    render_diff_line(line, is_current)
-                }
+        let (left_span_line, right_span_line) = if is_edit_line {
+            if let (Some((panel, _, _, _)), Some(live)) = (edit_info, &edit_live_text) {
+                render_diff_line_with_live(line, is_current, panel, live)
             } else {
                 render_diff_line(line, is_current)
-            };
+            }
+        } else {
+            render_diff_line(line, is_current)
+        };
 
         left_lines.push(left_span_line);
         right_lines.push(right_span_line);
@@ -252,25 +278,27 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(left_para, left_inner);
     f.render_widget(right_para, right_inner);
 
-    // Render cursor if editing — find display row from source_line + panel
+    // Render cursor if editing
     if let Some((panel, source_line, display_line, cursor_col)) = edit_info {
-        // Find the display index: primary by line_no, fallback to display_line (ghost)
-        let edit_display_idx = result.lines.iter().position(|dl| {
-            let ln = match panel {
-                PanelSide::Left => dl.left_line_no,
-                PanelSide::Right => dl.right_line_no,
-                _ => None,
-            };
-            ln.map(|n| n as usize - 1) == Some(source_line)
-        }).unwrap_or(display_line);
-        let row_on_screen = edit_display_idx.saturating_sub(app.scroll_offset);
+        let edit_display_idx = result
+            .lines
+            .iter()
+            .position(|dl| {
+                let ln = match panel {
+                    PanelSide::Left => dl.left_line_no,
+                    PanelSide::Right => dl.right_line_no,
+                    _ => None,
+                };
+                ln.map(|n| n as usize - 1) == Some(source_line)
+            })
+            .unwrap_or(display_line);
+        let row_on_screen = edit_display_idx.saturating_sub(tab.scroll_offset);
         let panel_rect = match panel {
             PanelSide::Left => left_inner,
             PanelSide::Right => right_inner,
             _ => left_inner,
         };
         if (row_on_screen as u16) < panel_rect.height {
-            // Calculate display column using unicode width
             let display_col = if let Some(ref live) = edit_live_text {
                 use unicode_width::UnicodeWidthStr;
                 let prefix: String = live.chars().take(cursor_col).collect();
@@ -423,24 +451,36 @@ fn render_diff_line_with_live(
     let left_line = if edit_panel == PanelSide::Left {
         Line::from(vec![
             Span::styled(left_no, Style::default().fg(FG_LINE_NO).bg(edit_bg)),
-            Span::styled(live_text.to_string(), Style::default().fg(Color::White).bg(edit_bg)),
+            Span::styled(
+                live_text.to_string(),
+                Style::default().fg(Color::White).bg(edit_bg),
+            ),
         ])
     } else {
         Line::from(vec![
             Span::styled(left_no, Style::default().fg(FG_LINE_NO).bg(left_bg)),
-            Span::styled(line.left_text.clone(), Style::default().fg(Color::White).bg(left_bg)),
+            Span::styled(
+                line.left_text.clone(),
+                Style::default().fg(Color::White).bg(left_bg),
+            ),
         ])
     };
 
     let right_line = if edit_panel == PanelSide::Right {
         Line::from(vec![
             Span::styled(right_no, Style::default().fg(FG_LINE_NO).bg(edit_bg)),
-            Span::styled(live_text.to_string(), Style::default().fg(Color::White).bg(edit_bg)),
+            Span::styled(
+                live_text.to_string(),
+                Style::default().fg(Color::White).bg(edit_bg),
+            ),
         ])
     } else {
         Line::from(vec![
             Span::styled(right_no, Style::default().fg(FG_LINE_NO).bg(right_bg)),
-            Span::styled(line.right_text.clone(), Style::default().fg(Color::White).bg(right_bg)),
+            Span::styled(
+                line.right_text.clone(),
+                Style::default().fg(Color::White).bg(right_bg),
+            ),
         ])
     };
 

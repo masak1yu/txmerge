@@ -43,15 +43,15 @@ fn main() -> io::Result<()> {
         2 => {
             let left = cli.files[0].clone();
             let right = cli.files[1].clone();
-            app.open_files(left, right);
+            app.active_tab_mut().open_files(left, right);
         }
         3 => {
             let left = cli.files[0].clone();
             let base = cli.files[1].clone();
             let right = cli.files[2].clone();
-            app.open_files_3way(left, base, right);
+            app.active_tab_mut().open_files_3way(left, base, right);
         }
-        _ => {} // No files — start with blank screen
+        _ => {} // No files -- start with blank screen
     }
 
     // Main loop

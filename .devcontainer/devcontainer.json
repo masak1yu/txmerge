@@ -1,0 +1,28 @@
+{
+  "name": "txmerge",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "vadimcn.vscode-lldb",
+        "anthropic.claude-code"
+      ],
+      "settings": {
+        "rust-analyzer.check.command": "clippy",
+        "editor.formatOnSave": true,
+        "[rust]": {
+          "editor.defaultFormatter": "rust-lang.rust-analyzer"
+        }
+      }
+    }
+  },
+  "remoteEnv": {
+    "CARGO_TERM_COLOR": "always"
+  },
+  "onCreateCommand": "curl -fsSL https://claude.ai/install.sh | bash",
+  "postCreateCommand": "cargo fetch"
+}

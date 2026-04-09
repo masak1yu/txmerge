@@ -6,13 +6,15 @@ A TUI diff and merge tool written in Rust. Inspired by WinMerge/WinXMerge, provi
 
 - **2-way diff** - Side-by-side comparison with word-level highlighting
 - **3-way merge** - Left / Base / Right panel layout with conflict detection
-- **File browser dialog** - Browse directories and select files visually (no path typing)
+- **Inline editing** - Click or press `i` to edit any panel directly
+- **Tab management** - Multiple comparison tabs with independent state
+- **3-way copy** - Left→Base / Right→Base copy operations for merge resolution
+- **File browser dialog** - Browse directories and select files visually
 - **Save dialog** - Choose save location with directory browser and filename input
 - **WinMerge-compatible shortcuts** - F7/F8 navigation, Alt+Arrow copy operations
-- **Mouse support** - Clickable toolbar icons, file browser click selection, dialog close buttons
-- **Copy operations** - Merge changes between files with undo/redo support
+- **Mouse support** - Click to edit, scroll wheel, toolbar icons, tab switching
+- **Undo/Redo** - Full undo/redo support including 3-way base text
 - **Diff options** - Ignore whitespace, ignore case
-- **Status messages** - Visual feedback for save, refresh, and other operations
 
 ## Installation
 
@@ -41,17 +43,29 @@ txmerge
 
 | Icon | Action |
 |------|--------|
-| 📄 | New (planned) |
+| 📄 | New comparison (opens in new tab) |
 | 📂 | Open files |
 | 💾 | Save files |
 | 🔄 | Refresh comparison |
 | `|<` `<` `>` `>|` | First / Prev / Next / Last diff |
-| `->` `<-` | Copy left-to-right / right-to-left |
+| `->` `<-` | Copy left→right (2-way) or left→base / right→base (3-way) |
 | `->|` `|<-` | Copy and advance to next diff |
 | `=>>` `<<=` | Copy all |
 | `ws` `Aa` | Toggle whitespace / case ignore |
 
 ## Key Bindings
+
+### Editing
+
+| Key | Action |
+|-----|--------|
+| Click / `i` | Enter edit mode on panel |
+| Type | Insert text at cursor |
+| `Backspace` / `Delete` | Delete character |
+| `Enter` | New line |
+| `Arrow keys` | Move cursor |
+| `Home` / `End` | Move to line start / end |
+| `Esc` | Exit edit mode |
 
 ### Navigation
 
@@ -64,16 +78,28 @@ txmerge
 | `j` / `Down` | Scroll down |
 | `k` / `Up` | Scroll up |
 | `PageDown` / `PageUp` | Scroll by page |
+| Mouse scroll | Scroll 3 lines per tick |
 | `g` / `G` | Go to top / bottom |
 
 ### Copy Operations
 
+| Key | Action (2-way) | Action (3-way) |
+|-----|----------------|----------------|
+| `Alt+Right` | Copy left → right | Copy left → base |
+| `Alt+Left` | Copy right → left | Copy right → base |
+| `Ctrl+Right` | Copy + next | Copy + next |
+| `Ctrl+Left` | Copy + next | Copy + next |
+
+### Tab Management
+
 | Key | Action |
 |-----|--------|
-| `Alt+Right` | Copy left to right |
-| `Alt+Left` | Copy right to left |
-| `Ctrl+Right` | Copy left to right + next |
-| `Ctrl+Left` | Copy right to left + next |
+| `Ctrl+T` | New tab |
+| `Ctrl+W` | Close tab |
+| `Ctrl+PageDown` | Next tab |
+| `Ctrl+PageUp` | Previous tab |
+| Click tab | Switch to tab |
+| Click `[x]` | Close tab |
 
 ### File Operations
 
@@ -86,32 +112,11 @@ txmerge
 | `Ctrl+Y` | Redo |
 | `Ctrl+Q` | Quit |
 
-### File Browser Dialog
-
-| Key | Action |
-|-----|--------|
-| `Up` / `Down` | Navigate entries |
-| `Enter` | Open directory / Select file |
-| `Backspace` | Go to parent directory |
-| `PageUp` / `PageDown` | Scroll by page |
-| `Esc` | Cancel |
-| Click | Select entry, click again to open/select |
-
-### Save Dialog
-
-| Key | Action |
-|-----|--------|
-| `Up` / `Down` | Navigate directories |
-| `Tab` | Enter directory / Copy filename |
-| Type | Input filename |
-| `Enter` | Save to current directory with input filename |
-| `Esc` | Cancel |
-
 ### Options
 
 | Key | Action |
 |-----|--------|
-| `F9` / `Ctrl+W` | Toggle whitespace ignore |
+| `F9` | Toggle whitespace ignore |
 | `Ctrl+I` | Toggle case ignore |
 
 ## Dependencies

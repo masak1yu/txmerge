@@ -12,7 +12,7 @@ struct MenuItem {
     action: Option<MenuAction>,
 }
 
-/// Canonical menu item list — used by both draw() and hit_test()
+/// Canonical menu item list -- used by both draw() and hit_test()
 fn menu_items() -> Vec<MenuItem> {
     vec![
         MenuItem {
@@ -20,7 +20,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "📄",
+            label: "\u{1F4C4}",
             action: Some(MenuAction::New),
         },
         MenuItem {
@@ -28,7 +28,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "📂",
+            label: "\u{1F4C2}",
             action: Some(MenuAction::Open),
         },
         MenuItem {
@@ -36,7 +36,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "💾",
+            label: "\u{1F4BE}",
             action: Some(MenuAction::Save),
         },
         MenuItem {
@@ -44,11 +44,11 @@ fn menu_items() -> Vec<MenuItem> {
             action: None,
         },
         MenuItem {
-            label: "🔄",
+            label: "\u{1F504}",
             action: Some(MenuAction::Refresh),
         },
         MenuItem {
-            label: " │ ",
+            label: " \u{2502} ",
             action: None,
         },
         MenuItem {
@@ -80,7 +80,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: Some(MenuAction::LastDiff),
         },
         MenuItem {
-            label: " │ ",
+            label: " \u{2502} ",
             action: None,
         },
         MenuItem {
@@ -96,7 +96,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: Some(MenuAction::CopyRightToLeft),
         },
         MenuItem {
-            label: " │ ",
+            label: " \u{2502} ",
             action: None,
         },
         MenuItem {
@@ -112,7 +112,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: Some(MenuAction::CopyRightToLeftNext),
         },
         MenuItem {
-            label: " │ ",
+            label: " \u{2502} ",
             action: None,
         },
         MenuItem {
@@ -128,7 +128,7 @@ fn menu_items() -> Vec<MenuItem> {
             action: Some(MenuAction::CopyAllRL),
         },
         MenuItem {
-            label: " │ ",
+            label: " \u{2502} ",
             action: None,
         },
         MenuItem {
@@ -172,6 +172,7 @@ pub fn hit_test(x: u16) -> Option<MenuAction> {
 }
 
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
+    let tab = app.active_tab();
     let active = Style::default()
         .fg(Color::Rgb(200, 200, 200))
         .bg(Color::Rgb(40, 40, 50));
@@ -187,7 +188,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         .fg(Color::Rgb(80, 80, 80))
         .bg(Color::Rgb(40, 40, 50));
 
-    let has_diff = app.diff_count() > 0;
+    let has_diff = tab.diff_count() > 0;
 
     let items = menu_items();
     let spans: Vec<Span> = items
@@ -195,36 +196,36 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         .map(|item| {
             let style = match item.action {
                 None => {
-                    // Separator or spacer
-                    if item.label.contains('│') {
+                    if item.label.contains('\u{2502}') {
                         separator
                     } else {
                         bg
                     }
                 }
                 Some(MenuAction::Save) => {
-                    if app.has_unsaved_changes {
+                    if tab.has_unsaved_changes {
                         toggled_on
                     } else {
                         active
                     }
                 }
                 Some(MenuAction::ToggleWhitespace) => {
-                    if app.diff_options.ignore_whitespace {
+                    if tab.diff_options.ignore_whitespace {
                         toggled_on
                     } else {
                         active
                     }
                 }
                 Some(MenuAction::ToggleCase) => {
-                    if app.diff_options.ignore_case {
+                    if tab.diff_options.ignore_case {
                         toggled_on
                     } else {
                         active
                     }
                 }
-                Some(MenuAction::New) | Some(MenuAction::Open) | Some(MenuAction::Refresh) => active,
-                // Navigation and copy actions depend on having diffs
+                Some(MenuAction::New) | Some(MenuAction::Open) | Some(MenuAction::Refresh) => {
+                    active
+                }
                 Some(_) => {
                     if has_diff {
                         active

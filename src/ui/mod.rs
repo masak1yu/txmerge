@@ -1,6 +1,7 @@
 pub mod diff_view;
 pub mod menu_bar;
 pub mod status_bar;
+pub mod tab_bar;
 pub mod three_way_view;
 
 use ratatui::Frame;
@@ -33,19 +34,40 @@ pub fn draw(f: &mut Frame, app: &App) {
     diff_view::reset_panel_rects();
     three_way_view::reset_panel_rects();
 
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(1), // menu bar
-            Constraint::Min(5),    // diff view
-            Constraint::Length(1), // status bar
-        ])
-        .split(f.area());
+    let show_tabs = app.tabs.len() > 1;
+
+    let chunks = if show_tabs {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1), // menu bar
+                Constraint::Length(1), // tab bar
+                Constraint::Min(5),    // diff view
+                Constraint::Length(1), // status bar
+            ])
+            .split(f.area())
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1), // menu bar
+                Constraint::Min(5),    // diff view
+                Constraint::Length(1), // status bar
+            ])
+            .split(f.area())
+    };
 
     menu_bar::draw(f, app, chunks[0]);
 
-    let main_area = chunks[1];
-    if app.is_three_way {
+    let (main_area, status_area) = if show_tabs {
+        tab_bar::draw(f, app, chunks[1]);
+        (chunks[2], chunks[3])
+    } else {
+        (chunks[1], chunks[2])
+    };
+
+    let tab = app.active_tab();
+    if tab.is_three_way {
         three_way_view::draw(f, app, main_area);
     } else {
         diff_view::draw(f, app, main_area);
@@ -65,10 +87,13 @@ pub fn draw(f: &mut Frame, app: &App) {
         AppMode::SaveConfirm => {
             draw_save_confirm_dialog(f, main_area);
         }
+        AppMode::CloseTabConfirm => {
+            draw_close_tab_confirm_dialog(f, main_area);
+        }
         AppMode::Normal | AppMode::Editing => {}
     }
 
-    status_bar::draw(f, app, chunks[2]);
+    status_bar::draw(f, app, status_area);
 }
 
 /// Draw [x] close button at top-right of popup_area and record its rect for hit testing
@@ -153,8 +178,7 @@ fn draw_file_browser_dialog(f: &mut Frame, app: &App, area: Rect) {
 
     // Line 0: current directory path
     let dir_display = browser.current_dir.to_string_lossy().to_string();
-    let dir_line = Paragraph::new(dir_display)
-        .style(Style::default().fg(Color::Yellow));
+    let dir_line = Paragraph::new(dir_display).style(Style::default().fg(Color::Yellow));
     let dir_rect = Rect {
         x: inner.x,
         y: inner.y,
@@ -170,7 +194,7 @@ fn draw_file_browser_dialog(f: &mut Frame, app: &App, area: Rect) {
         width: inner.width,
         height: 1,
     };
-    let sep = Paragraph::new("─".repeat(inner.width as usize))
+    let sep = Paragraph::new("\u{2500}".repeat(inner.width as usize))
         .style(Style::default().fg(Color::Rgb(80, 80, 80)));
     f.render_widget(sep, sep_rect);
 
@@ -214,9 +238,9 @@ fn draw_file_browser_dialog(f: &mut Frame, app: &App, area: Rect) {
 
         let (prefix, style) = if entry.is_dir {
             if is_selected {
-                ("📁 ", selected_dir_style)
+                ("\u{1F4C1} ", selected_dir_style)
             } else {
-                ("📁 ", dir_style)
+                ("\u{1F4C1} ", dir_style)
             }
         } else if is_selected {
             ("   ", selected_style)
@@ -320,6 +344,24 @@ fn draw_save_confirm_dialog(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, popup_area);
     let block = Block::default()
         .title(" Unsaved changes ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow));
+    let inner = block.inner(popup_area);
+    f.render_widget(block, popup_area);
+    draw_close_button(f, popup_area);
+
+    let text =
+        Paragraph::new("[s]ave  [d]iscard  [c]ancel").style(Style::default().fg(Color::White));
+    f.render_widget(text, inner);
+}
+
+fn draw_close_tab_confirm_dialog(f: &mut Frame, area: Rect) {
+    let popup_width = 50.min(area.width.saturating_sub(4));
+    let popup_area = center_popup(area, popup_width, 5);
+
+    f.render_widget(Clear, popup_area);
+    let block = Block::default()
+        .title(" Close tab - unsaved changes ")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Yellow));
     let inner = block.inner(popup_area);
