@@ -29,7 +29,7 @@ pub enum PanelSide {
 
 pub struct EditState {
     pub panel: PanelSide,
-    pub source_line: usize,  // 0-based index into source text lines
+    pub source_line: usize,  // 0-based index into pane buffer
     pub display_line: usize, // index in diff result lines
     pub cursor_col: usize,   // char index in line
     pub dirty: bool,
@@ -37,9 +37,9 @@ pub struct EditState {
 
 #[derive(Clone)]
 struct TextSnapshot {
-    left_text: String,
-    right_text: String,
-    base_text: String,
+    left_buf: Vec<String>,
+    right_buf: Vec<String>,
+    base_buf: Vec<String>,
 }
 
 // ============================================================
@@ -50,9 +50,9 @@ pub struct TabState {
     pub left_path: Option<PathBuf>,
     pub right_path: Option<PathBuf>,
     pub base_path: Option<PathBuf>,
-    pub left_text: String,
-    pub right_text: String,
-    pub base_text: String,
+    pub left_buf: Vec<String>,
+    pub right_buf: Vec<String>,
+    pub base_buf: Vec<String>,
     pub diff_result: Option<DiffResult>,
     pub three_way_result: Option<ThreeWayResult>,
     pub is_three_way: bool,
@@ -71,9 +71,9 @@ impl TabState {
             left_path: None,
             right_path: None,
             base_path: None,
-            left_text: String::new(),
-            right_text: String::new(),
-            base_text: String::new(),
+            left_buf: Vec::new(),
+            right_buf: Vec::new(),
+            base_buf: Vec::new(),
             diff_result: None,
             three_way_result: None,
             is_three_way: false,
@@ -96,12 +96,12 @@ impl TabState {
     }
 
     pub fn open_files(&mut self, left: PathBuf, right: PathBuf) {
-        self.left_text = fs::read_to_string(&left).unwrap_or_default();
-        self.right_text = fs::read_to_string(&right).unwrap_or_default();
+        self.left_buf = str_to_lines(&fs::read_to_string(&left).unwrap_or_default());
+        self.right_buf = str_to_lines(&fs::read_to_string(&right).unwrap_or_default());
         self.left_path = Some(left);
         self.right_path = Some(right);
         self.base_path = None;
-        self.base_text.clear();
+        self.base_buf = vec![String::new()];
         self.is_three_way = false;
         self.three_way_result = None;
         self.has_unsaved_changes = false;
@@ -111,9 +111,9 @@ impl TabState {
     }
 
     pub fn open_files_3way(&mut self, left: PathBuf, base: PathBuf, right: PathBuf) {
-        self.left_text = fs::read_to_string(&left).unwrap_or_default();
-        self.base_text = fs::read_to_string(&base).unwrap_or_default();
-        self.right_text = fs::read_to_string(&right).unwrap_or_default();
+        self.left_buf = str_to_lines(&fs::read_to_string(&left).unwrap_or_default());
+        self.base_buf = str_to_lines(&fs::read_to_string(&base).unwrap_or_default());
+        self.right_buf = str_to_lines(&fs::read_to_string(&right).unwrap_or_default());
         self.left_path = Some(left);
         self.base_path = Some(base);
         self.right_path = Some(right);
@@ -138,7 +138,7 @@ impl TabState {
         // Clear stale edit state — diff line layout is about to change (WinXMerge pattern)
         self.edit_state = None;
         if self.is_three_way {
-            let result = compute_three_way_diff(&self.base_text, &self.left_text, &self.right_text);
+            let result = compute_three_way_diff(&self.base_buf, &self.left_buf, &self.right_buf);
             if reset_position {
                 self.current_diff = if !result.diff_positions.is_empty() {
                     0
@@ -154,7 +154,7 @@ impl TabState {
             self.three_way_result = Some(result);
             self.diff_result = None;
         } else {
-            let result = compute_diff(&self.left_text, &self.right_text, &self.diff_options);
+            let result = compute_diff(&self.left_buf, &self.right_buf, &self.diff_options);
             if reset_position {
                 self.current_diff = if result.diff_count > 0 { 0 } else { -1 };
             } else {
@@ -188,20 +188,17 @@ impl TabState {
                 .as_ref()
                 .map(|r| r.lines.len())
                 .unwrap_or_else(|| {
-                    let l = self.source_lines(PanelSide::Left).len();
-                    let b = self.source_lines(PanelSide::Base).len();
-                    let r = self.source_lines(PanelSide::Right).len();
-                    l.max(b).max(r).max(1)
+                    self.left_buf
+                        .len()
+                        .max(self.base_buf.len())
+                        .max(self.right_buf.len())
+                        .max(1)
                 })
         } else {
             self.diff_result
                 .as_ref()
                 .map(|r| r.lines.len())
-                .unwrap_or_else(|| {
-                    let l = self.source_lines(PanelSide::Left).len();
-                    let r = self.source_lines(PanelSide::Right).len();
-                    l.max(r).max(1)
-                })
+                .unwrap_or_else(|| self.left_buf.len().max(self.right_buf.len()).max(1))
         }
     }
 
@@ -245,9 +242,9 @@ impl TabState {
 
     fn push_undo(&mut self) {
         self.undo_stack.push(TextSnapshot {
-            left_text: self.left_text.clone(),
-            right_text: self.right_text.clone(),
-            base_text: self.base_text.clone(),
+            left_buf: self.left_buf.clone(),
+            right_buf: self.right_buf.clone(),
+            base_buf: self.base_buf.clone(),
         });
         self.redo_stack.clear();
     }
@@ -255,13 +252,13 @@ impl TabState {
     pub fn undo(&mut self) {
         if let Some(snapshot) = self.undo_stack.pop() {
             self.redo_stack.push(TextSnapshot {
-                left_text: self.left_text.clone(),
-                right_text: self.right_text.clone(),
-                base_text: self.base_text.clone(),
+                left_buf: self.left_buf.clone(),
+                right_buf: self.right_buf.clone(),
+                base_buf: self.base_buf.clone(),
             });
-            self.left_text = snapshot.left_text;
-            self.right_text = snapshot.right_text;
-            self.base_text = snapshot.base_text;
+            self.left_buf = snapshot.left_buf;
+            self.right_buf = snapshot.right_buf;
+            self.base_buf = snapshot.base_buf;
             self.recompute_diff();
             self.has_unsaved_changes = !self.undo_stack.is_empty();
         }
@@ -270,13 +267,13 @@ impl TabState {
     pub fn redo(&mut self) {
         if let Some(snapshot) = self.redo_stack.pop() {
             self.undo_stack.push(TextSnapshot {
-                left_text: self.left_text.clone(),
-                right_text: self.right_text.clone(),
-                base_text: self.base_text.clone(),
+                left_buf: self.left_buf.clone(),
+                right_buf: self.right_buf.clone(),
+                base_buf: self.base_buf.clone(),
             });
-            self.left_text = snapshot.left_text;
-            self.right_text = snapshot.right_text;
-            self.base_text = snapshot.base_text;
+            self.left_buf = snapshot.left_buf;
+            self.right_buf = snapshot.right_buf;
+            self.base_buf = snapshot.base_buf;
             self.recompute_diff();
             self.has_unsaved_changes = true;
         }
@@ -365,17 +362,23 @@ impl TabState {
         self.push_undo();
         self.edit_state = None;
 
-        // Rebuild base lines: replace the diff block with source lines
-        let mut base_lines: Vec<String> = self.base_text.lines().map(String::from).collect();
+        // Rebuild base buffer: replace the diff block with source lines
+        let mut base_lines = self.base_buf.clone();
         let source_lines: Vec<String> = if use_left {
             result.lines[start..end]
                 .iter()
-                .filter_map(|l| l.left_line_no.map(|_| l.left_text.clone()))
+                .filter_map(|l| {
+                    l.left_line_no
+                        .map(|n| self.left_buf[n as usize - 1].clone())
+                })
                 .collect()
         } else {
             result.lines[start..end]
                 .iter()
-                .filter_map(|l| l.right_line_no.map(|_| l.right_text.clone()))
+                .filter_map(|l| {
+                    l.right_line_no
+                        .map(|n| self.right_buf[n as usize - 1].clone())
+                })
                 .collect()
         };
 
@@ -414,10 +417,7 @@ impl TabState {
             }
         }
 
-        self.base_text = base_lines.join("\n");
-        if !self.base_text.is_empty() && !self.base_text.ends_with('\n') {
-            self.base_text.push('\n');
-        }
+        self.base_buf = base_lines;
         self.has_unsaved_changes = true;
         self.recompute_diff_keep_pos();
     }
@@ -435,9 +435,9 @@ impl TabState {
     pub fn copy_all_left_to_right(&mut self) {
         self.push_undo();
         if self.is_three_way {
-            self.base_text = self.left_text.clone();
+            self.base_buf = self.left_buf.clone();
         } else {
-            self.right_text = self.left_text.clone();
+            self.right_buf = self.left_buf.clone();
         }
         self.has_unsaved_changes = true;
         self.recompute_diff();
@@ -446,9 +446,9 @@ impl TabState {
     pub fn copy_all_right_to_left(&mut self) {
         self.push_undo();
         if self.is_three_way {
-            self.base_text = self.right_text.clone();
+            self.base_buf = self.right_buf.clone();
         } else {
-            self.left_text = self.right_text.clone();
+            self.left_buf = self.right_buf.clone();
         }
         self.has_unsaved_changes = true;
         self.recompute_diff();
@@ -483,8 +483,8 @@ impl TabState {
             end += 1;
         }
 
-        let mut left_lines: Vec<String> = self.left_text.lines().map(String::from).collect();
-        let mut right_lines: Vec<String> = self.right_text.lines().map(String::from).collect();
+        let mut left_lines = self.left_buf.clone();
+        let mut right_lines = self.right_buf.clone();
 
         if left_to_right {
             let mut right_removes = Vec::new();
@@ -494,12 +494,14 @@ impl TabState {
             for line in &result.lines[start..end] {
                 match line.status {
                     LineStatus::Modified => {
-                        if let Some(rn) = line.right_line_no {
-                            right_lines[rn as usize - 1] = line.left_text.clone();
+                        if let (Some(rn), Some(ln)) = (line.right_line_no, line.left_line_no) {
+                            right_lines[rn as usize - 1] = self.left_buf[ln as usize - 1].clone();
                         }
                     }
                     LineStatus::Removed => {
-                        left_source.push(line.left_text.clone());
+                        if let Some(ln) = line.left_line_no {
+                            left_source.push(self.left_buf[ln as usize - 1].clone());
+                        }
                         if insert_pos.is_none() {
                             insert_pos = if start > 0 {
                                 result.lines[start - 1].right_line_no.map(|n| n as usize)
@@ -538,12 +540,14 @@ impl TabState {
             for line in &result.lines[start..end] {
                 match line.status {
                     LineStatus::Modified => {
-                        if let Some(ln) = line.left_line_no {
-                            left_lines[ln as usize - 1] = line.right_text.clone();
+                        if let (Some(ln), Some(rn)) = (line.left_line_no, line.right_line_no) {
+                            left_lines[ln as usize - 1] = self.right_buf[rn as usize - 1].clone();
                         }
                     }
                     LineStatus::Added => {
-                        right_source.push(line.right_text.clone());
+                        if let Some(rn) = line.right_line_no {
+                            right_source.push(self.right_buf[rn as usize - 1].clone());
+                        }
                         if insert_pos.is_none() {
                             insert_pos = if start > 0 {
                                 result.lines[start - 1].left_line_no.map(|n| n as usize)
@@ -576,23 +580,17 @@ impl TabState {
             }
         }
 
-        self.left_text = left_lines.join("\n");
-        self.right_text = right_lines.join("\n");
-        if !self.left_text.is_empty() && !self.left_text.ends_with('\n') {
-            self.left_text.push('\n');
-        }
-        if !self.right_text.is_empty() && !self.right_text.ends_with('\n') {
-            self.right_text.push('\n');
-        }
+        self.left_buf = left_lines;
+        self.right_buf = right_lines;
         self.recompute_diff_keep_pos();
     }
 
     // === New File ===
 
     pub fn new_blank(&mut self, is_three_way: bool) {
-        self.left_text.clear();
-        self.right_text.clear();
-        self.base_text.clear();
+        self.left_buf = Vec::new();
+        self.right_buf = Vec::new();
+        self.base_buf = Vec::new();
         self.left_path = None;
         self.right_path = None;
         self.base_path = None;
@@ -604,42 +602,52 @@ impl TabState {
         self.recompute_diff();
     }
 
-    // === Editing ===
+    // === Buffer accessors ===
 
-    fn source_text(&self, panel: PanelSide) -> &str {
+    fn buf(&self, panel: PanelSide) -> &[String] {
         match panel {
-            PanelSide::Left => &self.left_text,
-            PanelSide::Right => &self.right_text,
-            PanelSide::Base => &self.base_text,
+            PanelSide::Left => &self.left_buf,
+            PanelSide::Right => &self.right_buf,
+            PanelSide::Base => &self.base_buf,
         }
     }
 
-    fn source_text_mut(&mut self, panel: PanelSide) -> &mut String {
+    fn buf_mut(&mut self, panel: PanelSide) -> &mut Vec<String> {
         match panel {
-            PanelSide::Left => &mut self.left_text,
-            PanelSide::Right => &mut self.right_text,
-            PanelSide::Base => &mut self.base_text,
+            PanelSide::Left => &mut self.left_buf,
+            PanelSide::Right => &mut self.right_buf,
+            PanelSide::Base => &mut self.base_buf,
         }
     }
 
     pub fn source_lines(&self, panel: PanelSide) -> Vec<String> {
-        let text = self.source_text(panel);
-        if text.is_empty() {
-            vec![String::new()]
-        } else {
-            text.lines().map(String::from).collect()
-        }
+        self.buf(panel).to_vec()
     }
 
-    fn set_source_lines(&mut self, panel: PanelSide, lines: Vec<String>) {
-        let text = lines.join("\n");
-        *self.source_text_mut(panel) = text;
+    /// True if the pane has no meaningful content (empty or single empty line).
+    pub fn pane_is_empty(&self, panel: PanelSide) -> bool {
+        let buf = self.buf(panel);
+        buf.is_empty() || buf.iter().all(|l| l.is_empty())
+    }
+
+    /// Joined text representation for file I/O and test assertions.
+    pub fn left_text(&self) -> String {
+        buf_to_text(&self.left_buf)
+    }
+
+    pub fn right_text(&self) -> String {
+        buf_to_text(&self.right_buf)
+    }
+
+    #[cfg(test)]
+    pub fn base_text(&self) -> String {
+        buf_to_text(&self.base_buf)
     }
 
     /// Resolve display line index to source line number for a given panel.
     /// For ghost lines, returns the nearest valid source line to allow editing.
     pub fn resolve_display_to_source(&self, display_idx: usize, panel: PanelSide) -> Option<usize> {
-        let line_count = self.source_lines(panel).len();
+        let line_count = self.buf(panel).len();
 
         if self.is_three_way {
             if let Some(ref result) = self.three_way_result {
@@ -655,7 +663,6 @@ impl TabState {
                     return Some(
                         self.find_nearest_source_line(
                             display_idx,
-                            panel,
                             &result
                                 .lines
                                 .iter()
@@ -689,12 +696,7 @@ impl TabState {
                         PanelSide::Base => None,
                     })
                     .collect();
-                return Some(self.find_nearest_source_line(
-                    display_idx,
-                    panel,
-                    &line_nos,
-                    line_count,
-                ));
+                return Some(self.find_nearest_source_line(display_idx, &line_nos, line_count));
             }
         }
 
@@ -706,7 +708,6 @@ impl TabState {
     fn find_nearest_source_line(
         &self,
         display_idx: usize,
-        _panel: PanelSide,
         line_nos: &[Option<u32>],
         line_count: usize,
     ) -> usize {
@@ -729,12 +730,13 @@ impl TabState {
             None => return,
         };
 
-        let lines = self.source_lines(panel);
-        let source_line = source_line.min(lines.len().saturating_sub(1));
+        let buf = self.buf(panel);
+        let source_line = source_line.min(buf.len().saturating_sub(1));
 
         let display_line = self.find_display_index(source_line, panel, display_line);
 
-        let line_len = lines
+        let line_len = self
+            .buf(panel)
             .get(source_line)
             .map(|l| l.chars().count())
             .unwrap_or(0);
@@ -808,21 +810,19 @@ impl TabState {
     }
 
     pub fn edit_insert_char(&mut self, ch: char) {
-        let es = match self.edit_state.as_ref() {
+        let (panel, source_line, cursor_col) = match self.edit_state.as_ref() {
             Some(e) => (e.panel, e.source_line, e.cursor_col),
             None => return,
         };
-        let (panel, source_line, cursor_col) = es;
-
-        let mut lines = self.source_lines(panel);
-        if source_line >= lines.len() {
-            lines.resize(source_line + 1, String::new());
+        {
+            let buf = self.buf_mut(panel);
+            if source_line >= buf.len() {
+                buf.resize(source_line + 1, String::new());
+            }
+            let line = &mut buf[source_line];
+            let byte_idx = char_to_byte_index(line, cursor_col);
+            line.insert(byte_idx, ch);
         }
-        let line = &mut lines[source_line];
-        let byte_idx = char_to_byte_index(line, cursor_col);
-        line.insert(byte_idx, ch);
-        self.set_source_lines(panel, lines);
-
         if let Some(ref mut e) = self.edit_state {
             e.cursor_col += 1;
             e.dirty = true;
@@ -830,86 +830,103 @@ impl TabState {
     }
 
     pub fn edit_backspace(&mut self) {
-        let es = match self.edit_state.as_ref() {
+        let (panel, source_line, cursor_col) = match self.edit_state.as_ref() {
             Some(e) => (e.panel, e.source_line, e.cursor_col),
             None => return,
         };
-        let (panel, source_line, cursor_col) = es;
-
-        let mut lines = self.source_lines(panel);
         if cursor_col > 0 {
-            let line = &mut lines[source_line];
-            let byte_idx = char_to_byte_index(line, cursor_col - 1);
-            let next_byte = char_to_byte_index(line, cursor_col);
-            line.drain(byte_idx..next_byte);
-            self.set_source_lines(panel, lines);
+            {
+                let buf = self.buf_mut(panel);
+                let line = &mut buf[source_line];
+                let byte_idx = char_to_byte_index(line, cursor_col - 1);
+                let next_byte = char_to_byte_index(line, cursor_col);
+                line.drain(byte_idx..next_byte);
+            }
             if let Some(ref mut e) = self.edit_state {
                 e.cursor_col -= 1;
                 e.dirty = true;
             }
-        } else if source_line > 0 && lines.len() > 1 {
-            let current = lines.remove(source_line);
-            let prev_len = lines[source_line - 1].chars().count();
-            lines[source_line - 1].push_str(&current);
-            self.set_source_lines(panel, lines);
-            if let Some(ref mut e) = self.edit_state {
-                e.source_line -= 1;
-                e.cursor_col = prev_len;
-                if e.display_line > 0 {
-                    e.display_line -= 1;
+        } else if source_line > 0 {
+            let prev_len = {
+                let buf = self.buf_mut(panel);
+                if buf.len() > 1 {
+                    let current = buf.remove(source_line);
+                    let prev_len = buf[source_line - 1].chars().count();
+                    buf[source_line - 1].push_str(&current);
+                    Some(prev_len)
+                } else {
+                    None
                 }
-                e.dirty = true;
+            };
+            if let Some(prev_len) = prev_len {
+                if let Some(ref mut e) = self.edit_state {
+                    e.source_line -= 1;
+                    e.cursor_col = prev_len;
+                    if e.display_line > 0 {
+                        e.display_line -= 1;
+                    }
+                    e.dirty = true;
+                }
             }
         }
     }
 
     pub fn edit_delete(&mut self) {
-        let es = match self.edit_state.as_ref() {
+        let (panel, source_line, cursor_col) = match self.edit_state.as_ref() {
             Some(e) => (e.panel, e.source_line, e.cursor_col),
             None => return,
         };
-        let (panel, source_line, cursor_col) = es;
-
-        let mut lines = self.source_lines(panel);
-        let line_char_len = lines[source_line].chars().count();
+        let line_char_len = self
+            .buf(panel)
+            .get(source_line)
+            .map(|l| l.chars().count())
+            .unwrap_or(0);
         if cursor_col < line_char_len {
-            let line = &mut lines[source_line];
-            let byte_idx = char_to_byte_index(line, cursor_col);
-            let next_byte = char_to_byte_index(line, cursor_col + 1);
-            line.drain(byte_idx..next_byte);
-            self.set_source_lines(panel, lines);
+            {
+                let buf = self.buf_mut(panel);
+                let line = &mut buf[source_line];
+                let byte_idx = char_to_byte_index(line, cursor_col);
+                let next_byte = char_to_byte_index(line, cursor_col + 1);
+                line.drain(byte_idx..next_byte);
+            }
             if let Some(ref mut e) = self.edit_state {
                 e.dirty = true;
             }
-        } else if source_line + 1 < lines.len() && lines.len() > 1 {
-            let next = lines.remove(source_line + 1);
-            lines[source_line].push_str(&next);
-            self.set_source_lines(panel, lines);
-            if let Some(ref mut e) = self.edit_state {
-                e.dirty = true;
+        } else {
+            let merged = {
+                let buf = self.buf_mut(panel);
+                if source_line + 1 < buf.len() && buf.len() > 1 {
+                    let next = buf.remove(source_line + 1);
+                    buf[source_line].push_str(&next);
+                    true
+                } else {
+                    false
+                }
+            };
+            if merged {
+                if let Some(ref mut e) = self.edit_state {
+                    e.dirty = true;
+                }
             }
         }
     }
 
     pub fn edit_enter(&mut self) {
-        let es = match self.edit_state.as_ref() {
+        let (panel, source_line, cursor_col) = match self.edit_state.as_ref() {
             Some(e) => (e.panel, e.source_line, e.cursor_col),
             None => return,
         };
-        let (panel, source_line, cursor_col) = es;
-
-        let mut lines = self.source_lines(panel);
-        if source_line >= lines.len() {
-            lines.resize(source_line + 1, String::new());
+        {
+            let buf = self.buf_mut(panel);
+            if source_line >= buf.len() {
+                buf.resize(source_line + 1, String::new());
+            }
+            let byte_idx = char_to_byte_index(&buf[source_line], cursor_col);
+            let rest = buf[source_line][byte_idx..].to_string();
+            let first = buf[source_line][..byte_idx].to_string();
+            buf[source_line] = first;
+            buf.insert(source_line + 1, rest);
         }
-        let line = &lines[source_line];
-        let byte_idx = char_to_byte_index(line, cursor_col);
-        let rest = line[byte_idx..].to_string();
-        let first = line[..byte_idx].to_string();
-        lines[source_line] = first;
-        lines.insert(source_line + 1, rest);
-        self.set_source_lines(panel, lines);
-
         if let Some(ref mut e) = self.edit_state {
             e.source_line += 1;
             e.display_line += 1;
@@ -929,8 +946,8 @@ impl TabState {
     pub fn edit_move_right(&mut self) {
         let info = self.edit_state.as_ref().map(|e| (e.panel, e.source_line));
         if let Some((panel, source_line)) = info {
-            let lines = self.source_lines(panel);
-            let line_len = lines
+            let line_len = self
+                .buf(panel)
                 .get(source_line)
                 .map(|l| l.chars().count())
                 .unwrap_or(0);
@@ -949,8 +966,8 @@ impl TabState {
             .map(|e| (e.panel, e.source_line, e.cursor_col));
         if let Some((panel, source_line, cursor_col)) = info {
             if source_line > 0 {
-                let lines = self.source_lines(panel);
-                let line_len = lines
+                let line_len = self
+                    .buf(panel)
                     .get(source_line - 1)
                     .map(|l| l.chars().count())
                     .unwrap_or(0);
@@ -971,9 +988,10 @@ impl TabState {
             .as_ref()
             .map(|e| (e.panel, e.source_line, e.cursor_col));
         if let Some((panel, source_line, cursor_col)) = info {
-            let lines = self.source_lines(panel);
-            if source_line + 1 < lines.len() {
-                let line_len = lines
+            let buf_len = self.buf(panel).len();
+            if source_line + 1 < buf_len {
+                let line_len = self
+                    .buf(panel)
                     .get(source_line + 1)
                     .map(|l| l.chars().count())
                     .unwrap_or(0);
@@ -995,8 +1013,8 @@ impl TabState {
     pub fn edit_move_end(&mut self) {
         let info = self.edit_state.as_ref().map(|e| (e.panel, e.source_line));
         if let Some((panel, source_line)) = info {
-            let lines = self.source_lines(panel);
-            let line_len = lines
+            let line_len = self
+                .buf(panel)
                 .get(source_line)
                 .map(|l| l.chars().count())
                 .unwrap_or(0);
@@ -1006,11 +1024,10 @@ impl TabState {
         }
     }
 
-    /// Get the current line text being edited (live from source)
+    /// Get the current line text being edited (live from source buffer)
     pub fn edit_current_line_text(&self) -> Option<String> {
         let e = self.edit_state.as_ref()?;
-        let lines = self.source_lines(e.panel);
-        lines.get(e.source_line).cloned()
+        self.buf(e.panel).get(e.source_line).cloned()
     }
 }
 
@@ -1307,6 +1324,35 @@ impl App {
     }
 }
 
+// ============================================================
+// Module-level helpers
+// ============================================================
+
+/// Convert a string (e.g. from file I/O) to a per-pane line buffer.
+pub fn str_to_lines(text: &str) -> Vec<String> {
+    if text.is_empty() {
+        vec![String::new()]
+    } else {
+        let lines: Vec<String> = text.lines().map(String::from).collect();
+        if lines.is_empty() {
+            vec![String::new()]
+        } else {
+            lines
+        }
+    }
+}
+
+/// Reconstruct a file-I/O string from a line buffer.
+pub fn buf_to_text(buf: &[String]) -> String {
+    if buf.is_empty() || (buf.len() == 1 && buf[0].is_empty()) {
+        String::new()
+    } else {
+        let mut s = buf.join("\n");
+        s.push('\n');
+        s
+    }
+}
+
 /// Convert char index to byte index in a string
 fn char_to_byte_index(s: &str, char_idx: usize) -> usize {
     s.char_indices()
@@ -1321,8 +1367,8 @@ mod tests {
 
     fn make_app_with_diff(left: &str, right: &str) -> App {
         let mut app = App::new();
-        app.active_tab_mut().left_text = left.to_string();
-        app.active_tab_mut().right_text = right.to_string();
+        app.active_tab_mut().left_buf = str_to_lines(left);
+        app.active_tab_mut().right_buf = str_to_lines(right);
         app.active_tab_mut().left_path = Some(PathBuf::from("/tmp/left.txt"));
         app.active_tab_mut().right_path = Some(PathBuf::from("/tmp/right.txt"));
         app.recompute_diff();
@@ -1347,7 +1393,7 @@ mod tests {
         for c in "hello".chars() {
             app.edit_insert_char(c);
         }
-        assert!(app.active_tab().left_text.contains("hello"));
+        assert!(app.active_tab().left_text().contains("hello"));
 
         // Click right panel -- should exit left edit and enter right
         app.exit_edit_mode();
@@ -1362,11 +1408,11 @@ mod tests {
         for c in "world".chars() {
             app.edit_insert_char(c);
         }
-        assert!(app.active_tab().right_text.contains("world"));
+        assert!(app.active_tab().right_text().contains("world"));
 
         // Both texts preserved
-        assert!(app.active_tab().left_text.contains("hello"));
-        assert!(app.active_tab().right_text.contains("world"));
+        assert!(app.active_tab().left_text().contains("hello"));
+        assert!(app.active_tab().right_text().contains("world"));
     }
 
     /// Edit -> F5 compare -> text is preserved
@@ -1382,13 +1428,13 @@ mod tests {
         }
         app.exit_edit_mode();
 
-        assert!(app.active_tab().left_text.contains("fn main() {}"));
+        assert!(app.active_tab().left_text().contains("fn main() {}"));
 
         // Simulate F5: recompute diff
         app.recompute_diff();
         assert!(app.active_tab().diff_result.is_some());
         // Text must survive
-        assert!(app.active_tab().left_text.contains("fn main() {}"));
+        assert!(app.active_tab().left_text().contains("fn main() {}"));
     }
 
     /// Edit -> F5 -> copy -> edit again (the reported bug)
@@ -1413,7 +1459,7 @@ mod tests {
         // Copy left to right
         app.copy_left_to_right();
         assert!(
-            app.active_tab().right_text.contains("line one"),
+            app.active_tab().right_text().contains("line one"),
             "copy should transfer text"
         );
 
@@ -1429,7 +1475,8 @@ mod tests {
         );
         app.edit_insert_char('X');
         assert!(
-            app.active_tab().left_text.starts_with('X') || app.active_tab().left_text.contains('X')
+            app.active_tab().left_text().starts_with('X')
+                || app.active_tab().left_text().contains('X')
         );
         app.exit_edit_mode();
 
@@ -1439,7 +1486,7 @@ mod tests {
         app.enter_edit_mode(PanelSide::Right, 0, 0);
         assert_eq!(app.mode, AppMode::Editing);
         app.edit_insert_char('Y');
-        assert!(app.active_tab().right_text.contains('Y'));
+        assert!(app.active_tab().right_text().contains('Y'));
         app.exit_edit_mode();
     }
 
@@ -1477,11 +1524,11 @@ mod tests {
         }
 
         assert!(
-            !app.active_tab().left_text.is_empty(),
+            !app.active_tab().left_text().is_empty(),
             "left text must survive stress"
         );
         assert!(
-            !app.active_tab().right_text.is_empty(),
+            !app.active_tab().right_text().is_empty(),
             "right text must survive stress"
         );
     }
@@ -1506,17 +1553,17 @@ mod tests {
     #[test]
     fn test_undo_after_edit() {
         let mut app = make_app_with_diff("hello\n", "world\n");
-        let original_left = app.active_tab().left_text.clone();
+        let original_left = app.active_tab().left_text();
 
         app.enter_edit_mode(PanelSide::Left, 0, 0);
         app.edit_insert_char('X');
         app.exit_edit_mode();
 
-        assert!(app.active_tab().left_text.contains('X'));
+        assert!(app.active_tab().left_text().contains('X'));
 
         app.undo();
         assert_eq!(
-            app.active_tab().left_text,
+            app.active_tab().left_text(),
             original_left,
             "undo must restore original"
         );
@@ -1532,11 +1579,11 @@ mod tests {
             app.edit_insert_char(c);
         }
         app.exit_edit_mode();
-        assert!(app.active_tab().left_text.contains("_modified"));
+        assert!(app.active_tab().left_text().contains("_modified"));
 
         app.recompute_diff();
         assert!(
-            app.active_tab().left_text.contains("_modified"),
+            app.active_tab().left_text().contains("_modified"),
             "F5 must preserve edited text"
         );
     }
@@ -1576,30 +1623,30 @@ mod tests {
         }
         app.exit_edit_mode();
 
-        let left_before = app.active_tab().left_text.clone();
-        let right_before = app.active_tab().right_text.clone();
+        let left_before = app.active_tab().left_text();
+        let right_before = app.active_tab().right_text();
 
         app.recompute_diff();
 
         assert_eq!(
-            app.active_tab().left_text,
+            app.active_tab().left_text(),
             left_before,
             "F5 destroyed left text"
         );
         assert_eq!(
-            app.active_tab().right_text,
+            app.active_tab().right_text(),
             right_before,
             "F5 destroyed right text"
         );
 
         app.recompute_diff();
         assert_eq!(
-            app.active_tab().left_text,
+            app.active_tab().left_text(),
             left_before,
             "second F5 destroyed left text"
         );
         assert_eq!(
-            app.active_tab().right_text,
+            app.active_tab().right_text(),
             right_before,
             "second F5 destroyed right text"
         );
@@ -1610,17 +1657,17 @@ mod tests {
         let mut app = make_app_with_diff("hello\nworld\n", "hello\nWORLD\n");
 
         app.copy_left_to_right();
-        let left_after_copy = app.active_tab().left_text.clone();
-        let right_after_copy = app.active_tab().right_text.clone();
+        let left_after_copy = app.active_tab().left_text();
+        let right_after_copy = app.active_tab().right_text();
 
         app.recompute_diff();
         assert_eq!(
-            app.active_tab().left_text,
+            app.active_tab().left_text(),
             left_after_copy,
             "F5 after copy destroyed left"
         );
         assert_eq!(
-            app.active_tab().right_text,
+            app.active_tab().right_text(),
             right_after_copy,
             "F5 after copy destroyed right"
         );
@@ -1636,17 +1683,17 @@ mod tests {
             app.edit_insert_char(char::from(b'A' + (i % 26) as u8));
             app.exit_edit_mode();
 
-            let left_snap = app.active_tab().left_text.clone();
-            let right_snap = app.active_tab().right_text.clone();
+            let left_snap = app.active_tab().left_text();
+            let right_snap = app.active_tab().right_text();
 
             app.recompute_diff();
             assert_eq!(
-                app.active_tab().left_text,
+                app.active_tab().left_text(),
                 left_snap,
                 "cycle {i}: F5 destroyed left"
             );
             assert_eq!(
-                app.active_tab().right_text,
+                app.active_tab().right_text(),
                 right_snap,
                 "cycle {i}: F5 destroyed right"
             );
@@ -1655,17 +1702,17 @@ mod tests {
                 app.copy_left_to_right();
             }
 
-            let left_snap2 = app.active_tab().left_text.clone();
-            let right_snap2 = app.active_tab().right_text.clone();
+            let left_snap2 = app.active_tab().left_text();
+            let right_snap2 = app.active_tab().right_text();
 
             app.recompute_diff();
             assert_eq!(
-                app.active_tab().left_text,
+                app.active_tab().left_text(),
                 left_snap2,
                 "cycle {i}: F5 after copy destroyed left"
             );
             assert_eq!(
-                app.active_tab().right_text,
+                app.active_tab().right_text(),
                 right_snap2,
                 "cycle {i}: F5 after copy destroyed right"
             );
@@ -1679,7 +1726,7 @@ mod tests {
         app.enter_edit_mode(PanelSide::Left, 0, 0);
         app.edit_insert_char('Z');
         assert!(
-            app.active_tab().left_text.contains('Z'),
+            app.active_tab().left_text().contains('Z'),
             "typed Z not in left_text"
         );
         app.exit_edit_mode();
@@ -1696,7 +1743,7 @@ mod tests {
         );
         app.edit_insert_char('W');
         assert!(
-            app.active_tab().right_text.contains('W'),
+            app.active_tab().right_text().contains('W'),
             "typed W not in right_text after copy"
         );
         app.exit_edit_mode();
@@ -1706,7 +1753,7 @@ mod tests {
         assert_eq!(app.mode, AppMode::Editing, "failed to enter edit after F5");
         app.edit_insert_char('Q');
         assert!(
-            app.active_tab().left_text.contains('Q'),
+            app.active_tab().left_text().contains('Q'),
             "typed Q not in left_text after F5"
         );
         app.exit_edit_mode();
@@ -1721,7 +1768,7 @@ mod tests {
         assert_eq!(app.mode, AppMode::Editing, "can't enter edit on blank left");
         app.edit_insert_char('L');
         assert!(
-            app.active_tab().left_text.contains('L'),
+            app.active_tab().left_text().contains('L'),
             "left input lost on blank"
         );
         app.exit_edit_mode();
@@ -1734,17 +1781,17 @@ mod tests {
         );
         app.edit_insert_char('R');
         assert!(
-            app.active_tab().right_text.contains('R'),
+            app.active_tab().right_text().contains('R'),
             "right input lost on blank"
         );
         app.exit_edit_mode();
 
         assert!(
-            app.active_tab().left_text.contains('L'),
+            app.active_tab().left_text().contains('L'),
             "left lost after right edit"
         );
         assert!(
-            app.active_tab().right_text.contains('R'),
+            app.active_tab().right_text().contains('R'),
             "right lost after left exit"
         );
     }
@@ -1780,7 +1827,7 @@ mod tests {
 
         app.edit_insert_char('R');
         assert!(
-            app.active_tab().right_text.contains('R'),
+            app.active_tab().right_text().contains('R'),
             "ghost line input not in source"
         );
 
@@ -1790,11 +1837,11 @@ mod tests {
 
         app.exit_edit_mode();
         assert!(
-            app.active_tab().right_text.contains('R'),
+            app.active_tab().right_text().contains('R'),
             "right text lost after exit"
         );
         assert!(
-            app.active_tab().left_text.contains("left only"),
+            app.active_tab().left_text().contains("left only"),
             "left text corrupted"
         );
     }
@@ -1830,7 +1877,7 @@ mod tests {
 
         app.edit_insert_char('W');
         assert!(
-            app.active_tab().right_text.contains('W'),
+            app.active_tab().right_text().contains('W'),
             "input lost on clamped ghost line"
         );
         app.exit_edit_mode();
@@ -1982,7 +2029,7 @@ mod tests {
             app.edit_insert_char(c);
         }
         assert!(
-            app.active_tab().right_text.contains("world"),
+            app.active_tab().right_text().contains("world"),
             "right input LOST"
         );
 
@@ -1993,11 +2040,11 @@ mod tests {
         app.exit_edit_mode();
 
         assert!(
-            app.active_tab().left_text.contains("hello"),
+            app.active_tab().left_text().contains("hello"),
             "left text corrupted"
         );
         assert!(
-            app.active_tab().right_text.contains("world"),
+            app.active_tab().right_text().contains("world"),
             "right text lost after exit"
         );
     }
@@ -2008,17 +2055,17 @@ mod tests {
 
         app.copy_left_to_right();
         assert!(
-            app.active_tab().right_text.contains("change this"),
+            app.active_tab().right_text().contains("change this"),
             "copy should overwrite"
         );
         assert!(
-            !app.active_tab().right_text.contains("DIFFERENT"),
+            !app.active_tab().right_text().contains("DIFFERENT"),
             "copy should replace old right"
         );
 
         app.undo();
         assert!(
-            app.active_tab().right_text.contains("DIFFERENT"),
+            app.active_tab().right_text().contains("DIFFERENT"),
             "undo must restore"
         );
     }
@@ -2029,9 +2076,9 @@ mod tests {
 
     fn make_3way_app(left: &str, base: &str, right: &str) -> App {
         let mut app = App::new();
-        app.active_tab_mut().left_text = left.to_string();
-        app.active_tab_mut().base_text = base.to_string();
-        app.active_tab_mut().right_text = right.to_string();
+        app.active_tab_mut().left_buf = str_to_lines(left);
+        app.active_tab_mut().base_buf = str_to_lines(base);
+        app.active_tab_mut().right_buf = str_to_lines(right);
         app.active_tab_mut().is_three_way = true;
         app.active_tab_mut().left_path = Some(PathBuf::from("/tmp/left.txt"));
         app.active_tab_mut().base_path = Some(PathBuf::from("/tmp/base.txt"));
@@ -2065,9 +2112,9 @@ mod tests {
             app.exit_edit_mode();
         }
 
-        assert!(app.active_tab().left_text.contains('X'));
-        assert!(app.active_tab().base_text.contains('X'));
-        assert!(app.active_tab().right_text.contains('X'));
+        assert!(app.active_tab().left_text().contains('X'));
+        assert!(app.active_tab().base_text().contains('X'));
+        assert!(app.active_tab().right_text().contains('X'));
     }
 
     #[test]
@@ -2080,11 +2127,11 @@ mod tests {
         }
         app.exit_edit_mode();
 
-        assert!(app.active_tab().base_text.contains("base_edited"));
+        assert!(app.active_tab().base_text().contains("base_edited"));
 
         app.recompute_diff();
         assert!(
-            app.active_tab().base_text.contains("base_edited"),
+            app.active_tab().base_text().contains("base_edited"),
             "F5 destroyed base edit"
         );
     }
@@ -2114,9 +2161,12 @@ mod tests {
         }
         app.exit_edit_mode();
 
-        assert!(app.active_tab().left_text.contains("LEFT"), "left lost");
-        assert!(app.active_tab().base_text.contains("BASE"), "base lost");
-        assert!(app.active_tab().right_text.contains("RIGHT"), "right lost");
+        assert!(app.active_tab().left_text().contains("LEFT"), "left lost");
+        assert!(app.active_tab().base_text().contains("BASE"), "base lost");
+        assert!(
+            app.active_tab().right_text().contains("RIGHT"),
+            "right lost"
+        );
     }
 
     #[test]
@@ -2155,14 +2205,14 @@ mod tests {
         app.edit_insert_char('R');
         app.exit_edit_mode();
 
-        let l = app.active_tab().left_text.clone();
-        let b = app.active_tab().base_text.clone();
-        let r = app.active_tab().right_text.clone();
+        let l = app.active_tab().left_text();
+        let b = app.active_tab().base_text();
+        let r = app.active_tab().right_text();
 
         app.recompute_diff();
-        assert_eq!(app.active_tab().left_text, l, "F5 destroyed left");
-        assert_eq!(app.active_tab().base_text, b, "F5 destroyed base");
-        assert_eq!(app.active_tab().right_text, r, "F5 destroyed right");
+        assert_eq!(app.active_tab().left_text(), l, "F5 destroyed left");
+        assert_eq!(app.active_tab().base_text(), b, "F5 destroyed base");
+        assert_eq!(app.active_tab().right_text(), r, "F5 destroyed right");
     }
 
     // ================================================================
@@ -2172,11 +2222,11 @@ mod tests {
     #[test]
     fn test_new_tab_independent_state() {
         let mut app = App::new();
-        app.active_tab_mut().left_text = "tab1".to_string();
+        app.active_tab_mut().left_buf = str_to_lines("tab1");
         app.new_tab();
-        assert!(app.active_tab().left_text.is_empty());
+        assert!(app.active_tab().pane_is_empty(PanelSide::Left));
         app.switch_tab(0);
-        assert_eq!(app.active_tab().left_text, "tab1");
+        assert_eq!(app.active_tab().left_buf, vec!["tab1".to_string()]);
     }
 
     #[test]

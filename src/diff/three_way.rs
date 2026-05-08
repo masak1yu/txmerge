@@ -42,29 +42,29 @@ fn extract_hunks(diff: &TextDiff<'_, '_, '_, str>) -> Vec<Hunk> {
 }
 
 pub fn compute_three_way_diff(
-    base_text: &str,
-    left_text: &str,
-    right_text: &str,
+    base_lines: &[String],
+    left_lines: &[String],
+    right_lines: &[String],
 ) -> ThreeWayResult {
-    let base_lines: Vec<&str> = base_text.lines().collect();
-    let left_lines: Vec<&str> = left_text.lines().collect();
-    let right_lines: Vec<&str> = right_text.lines().collect();
+    let base_refs: Vec<&str> = base_lines.iter().map(|s| s.as_str()).collect();
+    let left_refs: Vec<&str> = left_lines.iter().map(|s| s.as_str()).collect();
+    let right_refs: Vec<&str> = right_lines.iter().map(|s| s.as_str()).collect();
 
-    let left_diff = TextDiff::from_lines(base_text, left_text);
-    let right_diff = TextDiff::from_lines(base_text, right_text);
+    let left_diff = TextDiff::from_slices(&base_refs, &left_refs);
+    let right_diff = TextDiff::from_slices(&base_refs, &right_refs);
 
     let left_hunks = extract_hunks(&left_diff);
     let right_hunks = extract_hunks(&right_diff);
 
-    let blocks = merge_hunks(&left_hunks, &right_hunks, &left_lines, &right_lines);
-    build_result_lines(&blocks, &base_lines, &left_lines, &right_lines)
+    let blocks = merge_hunks(&left_hunks, &right_hunks, left_lines, right_lines);
+    build_result_lines(&blocks, base_lines, left_lines, right_lines)
 }
 
 fn merge_hunks(
     left_hunks: &[Hunk],
     right_hunks: &[Hunk],
-    left_lines: &[&str],
-    right_lines: &[&str],
+    left_lines: &[String],
+    right_lines: &[String],
 ) -> Vec<DiffBlock> {
     let mut blocks = Vec::new();
     let mut li = 0usize;
@@ -162,8 +162,8 @@ fn merge_hunks(
         };
 
         let status = if group_has_left && group_has_right {
-            let left_new: Vec<&str> = left_lines[group_left_start..group_left_end].to_vec();
-            let right_new: Vec<&str> = right_lines[group_right_start..group_right_end].to_vec();
+            let left_new = &left_lines[group_left_start..group_left_end];
+            let right_new = &right_lines[group_right_start..group_right_end];
             if left_new == right_new {
                 ThreeWayStatus::BothChanged
             } else {
@@ -195,9 +195,9 @@ fn merge_hunks(
 
 fn build_result_lines(
     blocks: &[DiffBlock],
-    base_lines: &[&str],
-    left_lines: &[&str],
-    right_lines: &[&str],
+    base_lines: &[String],
+    left_lines: &[String],
+    right_lines: &[String],
 ) -> ThreeWayResult {
     let mut result_lines = Vec::new();
     let mut diff_positions = Vec::new();
@@ -211,9 +211,6 @@ fn build_result_lines(
         // Equal lines before this block
         while base_pos < block.base_start {
             result_lines.push(ThreeWayLine {
-                left_text: left_lines.get(left_pos).unwrap_or(&"").to_string(),
-                base_text: base_lines.get(base_pos).unwrap_or(&"").to_string(),
-                right_text: right_lines.get(right_pos).unwrap_or(&"").to_string(),
                 status: ThreeWayStatus::Equal,
                 left_line_no: Some(left_pos as u32 + 1),
                 base_line_no: Some(base_pos as u32 + 1),
@@ -236,38 +233,23 @@ fn build_result_lines(
         }
 
         for j in 0..max_lines {
-            let (lt, l_no) = if j < left_count {
-                let idx = block.left_start + j;
-                (
-                    left_lines.get(idx).unwrap_or(&"").to_string(),
-                    Some(idx as u32 + 1),
-                )
+            let l_no = if j < left_count {
+                Some((block.left_start + j) as u32 + 1)
             } else {
-                (String::new(), None)
+                None
             };
-            let (bt, b_no) = if j < base_count {
-                let idx = block.base_start + j;
-                (
-                    base_lines.get(idx).unwrap_or(&"").to_string(),
-                    Some(idx as u32 + 1),
-                )
+            let b_no = if j < base_count {
+                Some((block.base_start + j) as u32 + 1)
             } else {
-                (String::new(), None)
+                None
             };
-            let (rt, r_no) = if j < right_count {
-                let idx = block.right_start + j;
-                (
-                    right_lines.get(idx).unwrap_or(&"").to_string(),
-                    Some(idx as u32 + 1),
-                )
+            let r_no = if j < right_count {
+                Some((block.right_start + j) as u32 + 1)
             } else {
-                (String::new(), None)
+                None
             };
 
             result_lines.push(ThreeWayLine {
-                left_text: lt,
-                base_text: bt,
-                right_text: rt,
                 status: block.status.clone(),
                 left_line_no: l_no,
                 base_line_no: b_no,
@@ -283,9 +265,6 @@ fn build_result_lines(
     // Trailing equal lines
     while base_pos < base_lines.len() {
         result_lines.push(ThreeWayLine {
-            left_text: left_lines.get(left_pos).unwrap_or(&"").to_string(),
-            base_text: base_lines.get(base_pos).unwrap_or(&"").to_string(),
-            right_text: right_lines.get(right_pos).unwrap_or(&"").to_string(),
             status: ThreeWayStatus::Equal,
             left_line_no: Some(left_pos as u32 + 1),
             base_line_no: Some(base_pos as u32 + 1),
@@ -294,6 +273,28 @@ fn build_result_lines(
         base_pos += 1;
         left_pos += 1;
         right_pos += 1;
+    }
+
+    // Handle case where left/right have more lines than base (all added)
+    while left_pos < left_lines.len() || right_pos < right_lines.len() {
+        let l_no = if left_pos < left_lines.len() {
+            left_pos += 1;
+            Some(left_pos as u32)
+        } else {
+            None
+        };
+        let r_no = if right_pos < right_lines.len() {
+            right_pos += 1;
+            Some(right_pos as u32)
+        } else {
+            None
+        };
+        result_lines.push(ThreeWayLine {
+            status: ThreeWayStatus::Equal,
+            left_line_no: l_no,
+            base_line_no: None,
+            right_line_no: r_no,
+        });
     }
 
     ThreeWayResult {
@@ -307,10 +308,14 @@ fn build_result_lines(
 mod tests {
     use super::*;
 
+    fn lines(s: &str) -> Vec<String> {
+        s.lines().map(String::from).collect()
+    }
+
     #[test]
     fn test_all_equal() {
-        let text = "a\nb\nc\n";
-        let result = compute_three_way_diff(text, text, text);
+        let text = lines("a\nb\nc\n");
+        let result = compute_three_way_diff(&text, &text, &text);
         assert_eq!(result.conflict_count, 0);
         assert_eq!(result.diff_positions.len(), 0);
         assert!(
@@ -323,10 +328,10 @@ mod tests {
 
     #[test]
     fn test_left_only_change() {
-        let base = "a\nb\nc\n";
-        let left = "a\nX\nc\n";
-        let right = "a\nb\nc\n";
-        let result = compute_three_way_diff(base, left, right);
+        let base = lines("a\nb\nc\n");
+        let left = lines("a\nX\nc\n");
+        let right = lines("a\nb\nc\n");
+        let result = compute_three_way_diff(&base, &left, &right);
         assert_eq!(result.conflict_count, 0);
         let changed: Vec<_> = result
             .lines
@@ -338,10 +343,10 @@ mod tests {
 
     #[test]
     fn test_right_only_change() {
-        let base = "a\nb\nc\n";
-        let left = "a\nb\nc\n";
-        let right = "a\nY\nc\n";
-        let result = compute_three_way_diff(base, left, right);
+        let base = lines("a\nb\nc\n");
+        let left = lines("a\nb\nc\n");
+        let right = lines("a\nY\nc\n");
+        let result = compute_three_way_diff(&base, &left, &right);
         assert_eq!(result.conflict_count, 0);
         let changed: Vec<_> = result
             .lines
@@ -353,10 +358,10 @@ mod tests {
 
     #[test]
     fn test_both_changed_same() {
-        let base = "a\nb\nc\n";
-        let left = "a\nX\nc\n";
-        let right = "a\nX\nc\n";
-        let result = compute_three_way_diff(base, left, right);
+        let base = lines("a\nb\nc\n");
+        let left = lines("a\nX\nc\n");
+        let right = lines("a\nX\nc\n");
+        let result = compute_three_way_diff(&base, &left, &right);
         assert_eq!(result.conflict_count, 0);
         let changed: Vec<_> = result
             .lines
@@ -368,10 +373,10 @@ mod tests {
 
     #[test]
     fn test_conflict() {
-        let base = "a\nb\nc\n";
-        let left = "a\nX\nc\n";
-        let right = "a\nY\nc\n";
-        let result = compute_three_way_diff(base, left, right);
+        let base = lines("a\nb\nc\n");
+        let left = lines("a\nX\nc\n");
+        let right = lines("a\nY\nc\n");
+        let result = compute_three_way_diff(&base, &left, &right);
         assert_eq!(result.conflict_count, 1);
         let conflicts: Vec<_> = result
             .lines
@@ -383,10 +388,10 @@ mod tests {
 
     #[test]
     fn test_left_added_line() {
-        let base = "a\nc\n";
-        let left = "a\nb\nc\n";
-        let right = "a\nc\n";
-        let result = compute_three_way_diff(base, left, right);
+        let base = lines("a\nc\n");
+        let left = lines("a\nb\nc\n");
+        let right = lines("a\nc\n");
+        let result = compute_three_way_diff(&base, &left, &right);
         assert_eq!(result.conflict_count, 0);
         assert!(
             result
@@ -398,10 +403,10 @@ mod tests {
 
     #[test]
     fn test_right_removed_line() {
-        let base = "a\nb\nc\n";
-        let left = "a\nb\nc\n";
-        let right = "a\nc\n";
-        let result = compute_three_way_diff(base, left, right);
+        let base = lines("a\nb\nc\n");
+        let left = lines("a\nb\nc\n");
+        let right = lines("a\nc\n");
+        let result = compute_three_way_diff(&base, &left, &right);
         assert_eq!(result.conflict_count, 0);
         assert!(
             result

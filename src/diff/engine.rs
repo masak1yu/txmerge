@@ -25,14 +25,18 @@ impl Default for DiffOptions {
     }
 }
 
-pub fn compute_diff(left_text: &str, right_text: &str, options: &DiffOptions) -> DiffResult {
-    let left_normalized = normalize_text(left_text, options);
-    let right_normalized = normalize_text(right_text, options);
+pub fn compute_diff(
+    left_lines: &[String],
+    right_lines: &[String],
+    options: &DiffOptions,
+) -> DiffResult {
+    let left_norm = normalize_lines(left_lines, options);
+    let right_norm = normalize_lines(right_lines, options);
 
-    let left_orig_lines: Vec<&str> = left_text.lines().collect();
-    let right_orig_lines: Vec<&str> = right_text.lines().collect();
+    let left_norm_refs: Vec<&str> = left_norm.iter().map(|s| s.as_str()).collect();
+    let right_norm_refs: Vec<&str> = right_norm.iter().map(|s| s.as_str()).collect();
 
-    let line_count = left_orig_lines.len().max(right_orig_lines.len());
+    let line_count = left_lines.len().max(right_lines.len());
     let algorithm = if line_count > LARGE_FILE_THRESHOLD {
         Algorithm::Patience
     } else {
@@ -42,7 +46,7 @@ pub fn compute_diff(left_text: &str, right_text: &str, options: &DiffOptions) ->
     let diff = TextDiff::configure()
         .algorithm(algorithm)
         .timeout(DIFF_TIMEOUT)
-        .diff_lines(&left_normalized, &right_normalized);
+        .diff_slices(&left_norm_refs, &right_norm_refs);
 
     let mut lines = Vec::new();
     let mut diff_positions = Vec::new();
@@ -55,21 +59,11 @@ pub fn compute_diff(left_text: &str, right_text: &str, options: &DiffOptions) ->
     while i < changes.len() {
         match changes[i].tag() {
             ChangeTag::Equal => {
-                let left_display = left_orig_lines
-                    .get(left_line_no as usize)
-                    .unwrap_or(&"")
-                    .to_string();
-                let right_display = right_orig_lines
-                    .get(right_line_no as usize)
-                    .unwrap_or(&"")
-                    .to_string();
                 left_line_no += 1;
                 right_line_no += 1;
                 lines.push(DiffLine {
                     left_line_no: Some(left_line_no),
                     right_line_no: Some(right_line_no),
-                    left_text: left_display,
-                    right_text: right_display,
                     status: LineStatus::Equal,
                     left_word_segments: Vec::new(),
                     right_word_segments: Vec::new(),
@@ -97,54 +91,40 @@ pub fn compute_diff(left_text: &str, right_text: &str, options: &DiffOptions) ->
                 let word_diff_enabled = line_count <= WORD_DIFF_LINE_LIMIT;
                 let n_pairs = del_indices.len().min(ins_indices.len());
                 for j in 0..n_pairs {
-                    let left_display = left_orig_lines
+                    let left_text = left_lines
                         .get(del_indices[j] as usize)
-                        .unwrap_or(&"")
-                        .to_string();
-                    let right_display = right_orig_lines
+                        .map(|s| s.as_str())
+                        .unwrap_or("");
+                    let right_text = right_lines
                         .get(ins_indices[j] as usize)
-                        .unwrap_or(&"")
-                        .to_string();
+                        .map(|s| s.as_str())
+                        .unwrap_or("");
                     let (left_segs, right_segs) = if word_diff_enabled {
-                        compute_word_diff(&left_display, &right_display)
+                        compute_word_diff(left_text, right_text)
                     } else {
                         (Vec::new(), Vec::new())
                     };
                     lines.push(DiffLine {
                         left_line_no: Some(del_indices[j] + 1),
                         right_line_no: Some(ins_indices[j] + 1),
-                        left_text: left_display,
-                        right_text: right_display,
                         status: LineStatus::Modified,
                         left_word_segments: left_segs,
                         right_word_segments: right_segs,
                     });
                 }
                 for j in n_pairs..del_indices.len() {
-                    let left_display = left_orig_lines
-                        .get(del_indices[j] as usize)
-                        .unwrap_or(&"")
-                        .to_string();
                     lines.push(DiffLine {
                         left_line_no: Some(del_indices[j] + 1),
                         right_line_no: None,
-                        left_text: left_display,
-                        right_text: String::new(),
                         status: LineStatus::Removed,
                         left_word_segments: Vec::new(),
                         right_word_segments: Vec::new(),
                     });
                 }
                 for j in n_pairs..ins_indices.len() {
-                    let right_display = right_orig_lines
-                        .get(ins_indices[j] as usize)
-                        .unwrap_or(&"")
-                        .to_string();
                     lines.push(DiffLine {
                         left_line_no: None,
                         right_line_no: Some(ins_indices[j] + 1),
-                        left_text: String::new(),
-                        right_text: right_display,
                         status: LineStatus::Added,
                         left_word_segments: Vec::new(),
                         right_word_segments: Vec::new(),
@@ -216,21 +196,20 @@ fn push_segment(segs: &mut Vec<WordDiffSegment>, text: &str, changed: bool) {
     });
 }
 
-fn normalize_text(text: &str, options: &DiffOptions) -> String {
-    let mut result = String::with_capacity(text.len());
-    for line in text.lines() {
-        let mut l = line.to_string();
-        if options.ignore_blank_lines && l.trim().is_empty() {
+fn normalize_lines(lines: &[String], options: &DiffOptions) -> Vec<String> {
+    let mut result = Vec::with_capacity(lines.len());
+    for line in lines {
+        if options.ignore_blank_lines && line.trim().is_empty() {
             continue;
         }
+        let mut l = line.clone();
         if options.ignore_whitespace {
             l = l.split_whitespace().collect::<Vec<&str>>().join(" ");
         }
         if options.ignore_case {
             l = l.to_lowercase();
         }
-        result.push_str(&l);
-        result.push('\n');
+        result.push(l);
     }
     result
 }
@@ -239,30 +218,50 @@ fn normalize_text(text: &str, options: &DiffOptions) -> String {
 mod tests {
     use super::*;
 
+    fn lines(s: &str) -> Vec<String> {
+        s.lines().map(String::from).collect()
+    }
+
     #[test]
     fn test_equal_files() {
-        let result = compute_diff("hello\nworld\n", "hello\nworld\n", &DiffOptions::default());
+        let result = compute_diff(
+            &lines("hello\nworld\n"),
+            &lines("hello\nworld\n"),
+            &DiffOptions::default(),
+        );
         assert_eq!(result.diff_count, 0);
         assert_eq!(result.lines.len(), 2);
     }
 
     #[test]
     fn test_added_line() {
-        let result = compute_diff("hello\n", "hello\nworld\n", &DiffOptions::default());
+        let result = compute_diff(
+            &lines("hello\n"),
+            &lines("hello\nworld\n"),
+            &DiffOptions::default(),
+        );
         assert_eq!(result.diff_count, 1);
         assert_eq!(result.lines[1].status, LineStatus::Added);
     }
 
     #[test]
     fn test_removed_line() {
-        let result = compute_diff("hello\nworld\n", "hello\n", &DiffOptions::default());
+        let result = compute_diff(
+            &lines("hello\nworld\n"),
+            &lines("hello\n"),
+            &DiffOptions::default(),
+        );
         assert_eq!(result.diff_count, 1);
         assert_eq!(result.lines[1].status, LineStatus::Removed);
     }
 
     #[test]
     fn test_modified_line() {
-        let result = compute_diff("hello\n", "hallo\n", &DiffOptions::default());
+        let result = compute_diff(
+            &lines("hello\n"),
+            &lines("hallo\n"),
+            &DiffOptions::default(),
+        );
         assert_eq!(result.diff_count, 1);
         assert_eq!(result.lines[0].status, LineStatus::Modified);
     }
@@ -273,7 +272,7 @@ mod tests {
             ignore_whitespace: true,
             ..Default::default()
         };
-        let result = compute_diff("hello   world\n", "hello world\n", &opts);
+        let result = compute_diff(&lines("hello   world\n"), &lines("hello world\n"), &opts);
         assert_eq!(result.diff_count, 0);
     }
 
@@ -283,7 +282,7 @@ mod tests {
             ignore_case: true,
             ..Default::default()
         };
-        let result = compute_diff("Hello\n", "hello\n", &opts);
+        let result = compute_diff(&lines("Hello\n"), &lines("hello\n"), &opts);
         assert_eq!(result.diff_count, 0);
     }
 
@@ -293,22 +292,26 @@ mod tests {
             ignore_blank_lines: true,
             ..Default::default()
         };
-        let result = compute_diff("hello\n\nworld\n", "hello\nworld\n", &opts);
+        let result = compute_diff(&lines("hello\n\nworld\n"), &lines("hello\nworld\n"), &opts);
         assert_eq!(result.diff_count, 0);
     }
 
     #[test]
     fn test_two_separate_blocks() {
-        let left = "a\nb\nc\nd\ne\n";
-        let right = "X\nb\nc\nd\nY\n";
-        let result = compute_diff(left, right, &DiffOptions::default());
+        let left = lines("a\nb\nc\nd\ne\n");
+        let right = lines("X\nb\nc\nd\nY\n");
+        let result = compute_diff(&left, &right, &DiffOptions::default());
         assert_eq!(result.diff_positions.len(), 2);
         assert_eq!(result.diff_count, 2);
     }
 
     #[test]
     fn test_word_diff_segments() {
-        let result = compute_diff("hello world\n", "hello earth\n", &DiffOptions::default());
+        let result = compute_diff(
+            &lines("hello world\n"),
+            &lines("hello earth\n"),
+            &DiffOptions::default(),
+        );
         assert_eq!(result.lines[0].status, LineStatus::Modified);
         assert!(!result.lines[0].left_word_segments.is_empty());
         assert!(!result.lines[0].right_word_segments.is_empty());
