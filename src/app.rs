@@ -188,15 +188,17 @@ impl TabState {
                 .as_ref()
                 .map(|r| r.lines.len())
                 .unwrap_or_else(|| {
-                    self.left_buf.len().max(self.base_buf.len()).max(self.right_buf.len()).max(1)
+                    self.left_buf
+                        .len()
+                        .max(self.base_buf.len())
+                        .max(self.right_buf.len())
+                        .max(1)
                 })
         } else {
             self.diff_result
                 .as_ref()
                 .map(|r| r.lines.len())
-                .unwrap_or_else(|| {
-                    self.left_buf.len().max(self.right_buf.len()).max(1)
-                })
+                .unwrap_or_else(|| self.left_buf.len().max(self.right_buf.len()).max(1))
         }
     }
 
@@ -365,12 +367,18 @@ impl TabState {
         let source_lines: Vec<String> = if use_left {
             result.lines[start..end]
                 .iter()
-                .filter_map(|l| l.left_line_no.map(|n| self.left_buf[n as usize - 1].clone()))
+                .filter_map(|l| {
+                    l.left_line_no
+                        .map(|n| self.left_buf[n as usize - 1].clone())
+                })
                 .collect()
         } else {
             result.lines[start..end]
                 .iter()
-                .filter_map(|l| l.right_line_no.map(|n| self.right_buf[n as usize - 1].clone()))
+                .filter_map(|l| {
+                    l.right_line_no
+                        .map(|n| self.right_buf[n as usize - 1].clone())
+                })
                 .collect()
         };
 
@@ -616,10 +624,6 @@ impl TabState {
         self.buf(panel).to_vec()
     }
 
-    fn set_source_lines(&mut self, panel: PanelSide, lines: Vec<String>) {
-        *self.buf_mut(panel) = lines;
-    }
-
     /// True if the pane has no meaningful content (empty or single empty line).
     pub fn pane_is_empty(&self, panel: PanelSide) -> bool {
         let buf = self.buf(panel);
@@ -635,6 +639,7 @@ impl TabState {
         buf_to_text(&self.right_buf)
     }
 
+    #[cfg(test)]
     pub fn base_text(&self) -> String {
         buf_to_text(&self.base_buf)
     }
@@ -730,7 +735,8 @@ impl TabState {
 
         let display_line = self.find_display_index(source_line, panel, display_line);
 
-        let line_len = self.buf(panel)
+        let line_len = self
+            .buf(panel)
             .get(source_line)
             .map(|l| l.chars().count())
             .unwrap_or(0);
@@ -870,7 +876,11 @@ impl TabState {
             Some(e) => (e.panel, e.source_line, e.cursor_col),
             None => return,
         };
-        let line_char_len = self.buf(panel).get(source_line).map(|l| l.chars().count()).unwrap_or(0);
+        let line_char_len = self
+            .buf(panel)
+            .get(source_line)
+            .map(|l| l.chars().count())
+            .unwrap_or(0);
         if cursor_col < line_char_len {
             {
                 let buf = self.buf_mut(panel);
@@ -936,7 +946,8 @@ impl TabState {
     pub fn edit_move_right(&mut self) {
         let info = self.edit_state.as_ref().map(|e| (e.panel, e.source_line));
         if let Some((panel, source_line)) = info {
-            let line_len = self.buf(panel)
+            let line_len = self
+                .buf(panel)
                 .get(source_line)
                 .map(|l| l.chars().count())
                 .unwrap_or(0);
@@ -955,7 +966,8 @@ impl TabState {
             .map(|e| (e.panel, e.source_line, e.cursor_col));
         if let Some((panel, source_line, cursor_col)) = info {
             if source_line > 0 {
-                let line_len = self.buf(panel)
+                let line_len = self
+                    .buf(panel)
                     .get(source_line - 1)
                     .map(|l| l.chars().count())
                     .unwrap_or(0);
@@ -978,7 +990,8 @@ impl TabState {
         if let Some((panel, source_line, cursor_col)) = info {
             let buf_len = self.buf(panel).len();
             if source_line + 1 < buf_len {
-                let line_len = self.buf(panel)
+                let line_len = self
+                    .buf(panel)
                     .get(source_line + 1)
                     .map(|l| l.chars().count())
                     .unwrap_or(0);
@@ -1000,7 +1013,8 @@ impl TabState {
     pub fn edit_move_end(&mut self) {
         let info = self.edit_state.as_ref().map(|e| (e.panel, e.source_line));
         if let Some((panel, source_line)) = info {
-            let line_len = self.buf(panel)
+            let line_len = self
+                .buf(panel)
                 .get(source_line)
                 .map(|l| l.chars().count())
                 .unwrap_or(0);
@@ -1320,7 +1334,11 @@ pub fn str_to_lines(text: &str) -> Vec<String> {
         vec![String::new()]
     } else {
         let lines: Vec<String> = text.lines().map(String::from).collect();
-        if lines.is_empty() { vec![String::new()] } else { lines }
+        if lines.is_empty() {
+            vec![String::new()]
+        } else {
+            lines
+        }
     }
 }
 
@@ -1457,7 +1475,8 @@ mod tests {
         );
         app.edit_insert_char('X');
         assert!(
-            app.active_tab().left_text().starts_with('X') || app.active_tab().left_text().contains('X')
+            app.active_tab().left_text().starts_with('X')
+                || app.active_tab().left_text().contains('X')
         );
         app.exit_edit_mode();
 
@@ -2144,7 +2163,10 @@ mod tests {
 
         assert!(app.active_tab().left_text().contains("LEFT"), "left lost");
         assert!(app.active_tab().base_text().contains("BASE"), "base lost");
-        assert!(app.active_tab().right_text().contains("RIGHT"), "right lost");
+        assert!(
+            app.active_tab().right_text().contains("RIGHT"),
+            "right lost"
+        );
     }
 
     #[test]

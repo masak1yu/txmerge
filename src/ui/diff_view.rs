@@ -156,7 +156,10 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         }
 
         // Show hint on first line if both panels are empty
-        if tab.pane_is_empty(PanelSide::Left) && tab.pane_is_empty(PanelSide::Right) && app.mode != AppMode::Editing {
+        if tab.pane_is_empty(PanelSide::Left)
+            && tab.pane_is_empty(PanelSide::Right)
+            && app.mode != AppMode::Editing
+        {
             left_lines.clear();
             left_lines.push(Line::from(vec![
                 Span::styled(

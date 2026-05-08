@@ -25,7 +25,11 @@ impl Default for DiffOptions {
     }
 }
 
-pub fn compute_diff(left_lines: &[String], right_lines: &[String], options: &DiffOptions) -> DiffResult {
+pub fn compute_diff(
+    left_lines: &[String],
+    right_lines: &[String],
+    options: &DiffOptions,
+) -> DiffResult {
     let left_norm = normalize_lines(left_lines, options);
     let right_norm = normalize_lines(right_lines, options);
 
@@ -87,8 +91,14 @@ pub fn compute_diff(left_lines: &[String], right_lines: &[String], options: &Dif
                 let word_diff_enabled = line_count <= WORD_DIFF_LINE_LIMIT;
                 let n_pairs = del_indices.len().min(ins_indices.len());
                 for j in 0..n_pairs {
-                    let left_text = left_lines.get(del_indices[j] as usize).map(|s| s.as_str()).unwrap_or("");
-                    let right_text = right_lines.get(ins_indices[j] as usize).map(|s| s.as_str()).unwrap_or("");
+                    let left_text = left_lines
+                        .get(del_indices[j] as usize)
+                        .map(|s| s.as_str())
+                        .unwrap_or("");
+                    let right_text = right_lines
+                        .get(ins_indices[j] as usize)
+                        .map(|s| s.as_str())
+                        .unwrap_or("");
                     let (left_segs, right_segs) = if word_diff_enabled {
                         compute_word_diff(left_text, right_text)
                     } else {
@@ -214,28 +224,44 @@ mod tests {
 
     #[test]
     fn test_equal_files() {
-        let result = compute_diff(&lines("hello\nworld\n"), &lines("hello\nworld\n"), &DiffOptions::default());
+        let result = compute_diff(
+            &lines("hello\nworld\n"),
+            &lines("hello\nworld\n"),
+            &DiffOptions::default(),
+        );
         assert_eq!(result.diff_count, 0);
         assert_eq!(result.lines.len(), 2);
     }
 
     #[test]
     fn test_added_line() {
-        let result = compute_diff(&lines("hello\n"), &lines("hello\nworld\n"), &DiffOptions::default());
+        let result = compute_diff(
+            &lines("hello\n"),
+            &lines("hello\nworld\n"),
+            &DiffOptions::default(),
+        );
         assert_eq!(result.diff_count, 1);
         assert_eq!(result.lines[1].status, LineStatus::Added);
     }
 
     #[test]
     fn test_removed_line() {
-        let result = compute_diff(&lines("hello\nworld\n"), &lines("hello\n"), &DiffOptions::default());
+        let result = compute_diff(
+            &lines("hello\nworld\n"),
+            &lines("hello\n"),
+            &DiffOptions::default(),
+        );
         assert_eq!(result.diff_count, 1);
         assert_eq!(result.lines[1].status, LineStatus::Removed);
     }
 
     #[test]
     fn test_modified_line() {
-        let result = compute_diff(&lines("hello\n"), &lines("hallo\n"), &DiffOptions::default());
+        let result = compute_diff(
+            &lines("hello\n"),
+            &lines("hallo\n"),
+            &DiffOptions::default(),
+        );
         assert_eq!(result.diff_count, 1);
         assert_eq!(result.lines[0].status, LineStatus::Modified);
     }
@@ -281,7 +307,11 @@ mod tests {
 
     #[test]
     fn test_word_diff_segments() {
-        let result = compute_diff(&lines("hello world\n"), &lines("hello earth\n"), &DiffOptions::default());
+        let result = compute_diff(
+            &lines("hello world\n"),
+            &lines("hello earth\n"),
+            &DiffOptions::default(),
+        );
         assert_eq!(result.lines[0].status, LineStatus::Modified);
         assert!(!result.lines[0].left_word_segments.is_empty());
         assert!(!result.lines[0].right_word_segments.is_empty());
