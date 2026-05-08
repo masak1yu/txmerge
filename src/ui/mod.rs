@@ -155,7 +155,7 @@ fn draw_file_browser_dialog(f: &mut Frame, app: &App, area: Rect) {
     let title = match app.mode {
         AppMode::OpenLeft => " Select left file ",
         AppMode::OpenRight => " Select right file ",
-        AppMode::OpenBase => " Select base file ",
+        AppMode::OpenBase => " Select middle file ",
         AppMode::SaveLeft => " Save left file ",
         AppMode::SaveRight => " Save right file ",
         _ => "",

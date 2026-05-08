@@ -64,7 +64,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         .base_path
         .as_ref()
         .map(|p| format!(" {} ", p.display()))
-        .unwrap_or_else(|| " (base) ".to_string());
+        .unwrap_or_else(|| " (middle) ".to_string());
     let right_title = tab
         .right_path
         .as_ref()
