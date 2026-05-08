@@ -16,8 +16,6 @@ pub struct WordDiffSegment {
 pub struct DiffLine {
     pub left_line_no: Option<u32>,
     pub right_line_no: Option<u32>,
-    pub left_text: String,
-    pub right_text: String,
     pub status: LineStatus,
     pub left_word_segments: Vec<WordDiffSegment>,
     pub right_word_segments: Vec<WordDiffSegment>,
@@ -43,9 +41,6 @@ pub enum ThreeWayStatus {
 
 #[derive(Debug, Clone)]
 pub struct ThreeWayLine {
-    pub base_text: String,
-    pub left_text: String,
-    pub right_text: String,
     pub status: ThreeWayStatus,
     pub base_line_no: Option<u32>,
     pub left_line_no: Option<u32>,

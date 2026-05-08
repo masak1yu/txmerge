@@ -551,7 +551,7 @@ fn handle_save_browser_mode(app: &mut App, key: KeyEvent) {
             if let Some(path) = save_path {
                 match app.mode {
                     AppMode::SaveLeft => {
-                        let left_text = app.active_tab().left_text.clone();
+                        let left_text = app.active_tab().left_text();
                         let _ = std::fs::write(&path, &left_text);
                         app.active_tab_mut().left_path = Some(path);
                         // Continue to save right
@@ -565,7 +565,7 @@ fn handle_save_browser_mode(app: &mut App, key: KeyEvent) {
                         app.mode = AppMode::SaveRight;
                     }
                     AppMode::SaveRight => {
-                        let right_text = app.active_tab().right_text.clone();
+                        let right_text = app.active_tab().right_text();
                         let _ = std::fs::write(&path, &right_text);
                         app.active_tab_mut().right_path = Some(path);
                         app.file_browser = None;

@@ -156,7 +156,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         }
 
         // Show hint on first line if both panels are empty
-        if tab.left_text.is_empty() && tab.right_text.is_empty() && app.mode != AppMode::Editing {
+        if tab.pane_is_empty(PanelSide::Left) && tab.pane_is_empty(PanelSide::Right) && app.mode != AppMode::Editing {
             left_lines.clear();
             left_lines.push(Line::from(vec![
                 Span::styled(
@@ -201,6 +201,9 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let visible_height = left_inner.height as usize;
     let start = tab.scroll_offset;
     let end = (start + visible_height).min(result.lines.len());
+
+    let left_src = tab.source_lines(PanelSide::Left);
+    let right_src = tab.source_lines(PanelSide::Right);
 
     // Determine which diff block each line belongs to
     let current_block_start = if tab.current_diff >= 0 {
@@ -259,14 +262,25 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             false
         };
 
+        let left_text = line
+            .left_line_no
+            .and_then(|n| left_src.get(n as usize - 1))
+            .map(|s| s.as_str())
+            .unwrap_or("");
+        let right_text = line
+            .right_line_no
+            .and_then(|n| right_src.get(n as usize - 1))
+            .map(|s| s.as_str())
+            .unwrap_or("");
+
         let (left_span_line, right_span_line) = if is_edit_line {
             if let (Some((panel, _, _, _)), Some(live)) = (edit_info, &edit_live_text) {
-                render_diff_line_with_live(line, is_current, panel, live)
+                render_diff_line_with_live(line, is_current, panel, live, left_text, right_text)
             } else {
-                render_diff_line(line, is_current)
+                render_diff_line(line, is_current, left_text, right_text)
             }
         } else {
-            render_diff_line(line, is_current)
+            render_diff_line(line, is_current, left_text, right_text)
         };
 
         left_lines.push(left_span_line);
@@ -316,6 +330,8 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
 fn render_diff_line(
     line: &crate::models::diff_line::DiffLine,
     is_current: bool,
+    left_text: &str,
+    right_text: &str,
 ) -> (Line<'static>, Line<'static>) {
     let (left_bg, right_bg) = match line.status {
         LineStatus::Equal => (BG_EQUAL, BG_EQUAL),
@@ -372,7 +388,7 @@ fn render_diff_line(
         Line::from(vec![
             Span::styled(left_no, Style::default().fg(FG_LINE_NO).bg(left_bg)),
             Span::styled(
-                line.left_text.clone(),
+                left_text.to_string(),
                 Style::default().fg(Color::White).bg(left_bg),
             ),
         ])
@@ -403,7 +419,7 @@ fn render_diff_line(
         Line::from(vec![
             Span::styled(right_no, Style::default().fg(FG_LINE_NO).bg(right_bg)),
             Span::styled(
-                line.right_text.clone(),
+                right_text.to_string(),
                 Style::default().fg(Color::White).bg(right_bg),
             ),
         ])
@@ -418,6 +434,8 @@ fn render_diff_line_with_live(
     is_current: bool,
     edit_panel: PanelSide,
     live_text: &str,
+    left_text: &str,
+    right_text: &str,
 ) -> (Line<'static>, Line<'static>) {
     let (left_bg, right_bg) = match line.status {
         LineStatus::Equal => (BG_EQUAL, BG_EQUAL),
@@ -460,7 +478,7 @@ fn render_diff_line_with_live(
         Line::from(vec![
             Span::styled(left_no, Style::default().fg(FG_LINE_NO).bg(left_bg)),
             Span::styled(
-                line.left_text.clone(),
+                left_text.to_string(),
                 Style::default().fg(Color::White).bg(left_bg),
             ),
         ])
@@ -478,7 +496,7 @@ fn render_diff_line_with_live(
         Line::from(vec![
             Span::styled(right_no, Style::default().fg(FG_LINE_NO).bg(right_bg)),
             Span::styled(
-                line.right_text.clone(),
+                right_text.to_string(),
                 Style::default().fg(Color::White).bg(right_bg),
             ),
         ])

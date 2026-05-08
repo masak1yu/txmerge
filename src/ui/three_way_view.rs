@@ -176,9 +176,9 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         }
 
         // Show hint if all panels are empty
-        if tab.left_text.is_empty()
-            && tab.base_text.is_empty()
-            && tab.right_text.is_empty()
+        if tab.pane_is_empty(PanelSide::Left)
+            && tab.pane_is_empty(PanelSide::Base)
+            && tab.pane_is_empty(PanelSide::Right)
             && app.mode != AppMode::Editing
         {
             left_lines.clear();
@@ -223,6 +223,10 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     }
 
     let result = tab.three_way_result.as_ref().unwrap();
+
+    let left_src = tab.source_lines(PanelSide::Left);
+    let base_src = tab.source_lines(PanelSide::Base);
+    let right_src = tab.source_lines(PanelSide::Right);
 
     let visible_height = left_inner.height as usize;
     let start = tab.scroll_offset;
@@ -279,9 +283,25 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             right_bg
         };
 
-        left_lines.push(render_line(&line.left_text, line.left_line_no, left_bg));
-        base_lines.push(render_line(&line.base_text, line.base_line_no, base_bg));
-        right_lines.push(render_line(&line.right_text, line.right_line_no, right_bg));
+        let left_text = line
+            .left_line_no
+            .and_then(|n| left_src.get(n as usize - 1))
+            .map(|s| s.as_str())
+            .unwrap_or("");
+        let base_text = line
+            .base_line_no
+            .and_then(|n| base_src.get(n as usize - 1))
+            .map(|s| s.as_str())
+            .unwrap_or("");
+        let right_text = line
+            .right_line_no
+            .and_then(|n| right_src.get(n as usize - 1))
+            .map(|s| s.as_str())
+            .unwrap_or("");
+
+        left_lines.push(render_line(left_text, line.left_line_no, left_bg));
+        base_lines.push(render_line(base_text, line.base_line_no, base_bg));
+        right_lines.push(render_line(right_text, line.right_line_no, right_bg));
     }
 
     f.render_widget(Paragraph::new(left_lines), left_inner);
