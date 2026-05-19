@@ -1,10 +1,14 @@
 use std::fs;
 use std::path::PathBuf;
 
+use crate::diff::dir_compare::scan_dirs;
 use crate::diff::engine::{DiffOptions, compute_diff};
+use crate::diff::git_diff::{extract_git_file, scan_git_diff};
 use crate::diff::three_way::compute_three_way_diff;
 use crate::file_browser::FileBrowser;
-use crate::models::diff_line::{DiffResult, LineStatus, ThreeWayResult, ThreeWayStatus};
+use crate::models::diff_line::{
+    DiffResult, DirCompareResult, LineStatus, ThreeWayResult, ThreeWayStatus,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppMode {
@@ -56,6 +60,8 @@ pub struct TabState {
     pub diff_result: Option<DiffResult>,
     pub three_way_result: Option<ThreeWayResult>,
     pub is_three_way: bool,
+    pub is_dir_compare: bool,
+    pub dir_result: Option<DirCompareResult>,
     pub diff_options: DiffOptions,
     pub current_diff: i32,
     pub scroll_offset: usize,
@@ -79,6 +85,8 @@ impl TabState {
             diff_result: None,
             three_way_result: None,
             is_three_way: false,
+            is_dir_compare: false,
+            dir_result: None,
             diff_options: DiffOptions::default(),
             current_diff: -1,
             scroll_offset: 0,
@@ -92,11 +100,48 @@ impl TabState {
     }
 
     pub fn title(&self) -> String {
+        if self.is_dir_compare {
+            if let Some(ref r) = self.dir_result {
+                if let Some(ref gc) = r.git_context {
+                    return if let Some(ref r2) = gc.ref2 {
+                        format!("{}..{}", gc.ref1, r2)
+                    } else {
+                        format!("{} (wt)", gc.ref1)
+                    };
+                }
+            }
+            return self
+                .left_path
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "Dirs".to_string());
+        }
         self.left_path
             .as_ref()
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "New".to_string())
+    }
+
+    pub fn open_dirs(&mut self, left: PathBuf, right: PathBuf) {
+        let result = scan_dirs(&left, &right);
+        self.left_path = Some(left);
+        self.right_path = Some(right);
+        self.base_path = None;
+        self.left_buf.clear();
+        self.right_buf.clear();
+        self.base_buf.clear();
+        self.diff_result = None;
+        self.three_way_result = None;
+        self.is_three_way = false;
+        self.is_dir_compare = true;
+        self.dir_result = Some(result);
+        self.has_unsaved_changes = false;
+        self.h_scroll = 0;
+        self.scroll_offset = 0;
+        self.undo_stack.clear();
+        self.redo_stack.clear();
     }
 
     pub fn open_files(&mut self, left: PathBuf, right: PathBuf) {
@@ -609,6 +654,8 @@ impl TabState {
         self.right_path = None;
         self.base_path = None;
         self.is_three_way = is_three_way;
+        self.is_dir_compare = false;
+        self.dir_result = None;
         self.has_unsaved_changes = false;
         self.h_scroll = 0;
         self.undo_stack.clear();
@@ -1058,6 +1105,10 @@ pub struct App {
     pub should_quit: bool,
     pub status_message: Option<(String, std::time::Instant)>,
     pub new_file_pending: bool,
+    /// Output path for git mergetool mode (`--output`).
+    pub output_path: Option<PathBuf>,
+    /// True once the user has saved to output_path at least once.
+    pub output_saved: bool,
 }
 
 impl App {
@@ -1070,6 +1121,8 @@ impl App {
             should_quit: false,
             status_message: None,
             new_file_pending: false,
+            output_path: None,
+            output_saved: false,
         }
     }
 
@@ -1239,6 +1292,118 @@ impl App {
         self.active_tab_mut().new_blank(is_three_way);
     }
 
+    // === Directory comparison ===
+
+    pub fn open_dirs(&mut self, left: PathBuf, right: PathBuf) {
+        self.active_tab_mut().open_dirs(left, right);
+    }
+
+    pub fn open_git_diff(&mut self, repo: PathBuf, ref1: String, ref2: Option<String>) {
+        let result = scan_git_diff(&repo, &ref1, ref2.as_deref());
+        let tab = self.active_tab_mut();
+        tab.left_path = Some(repo.clone());
+        tab.right_path = Some(repo);
+        tab.base_path = None;
+        tab.left_buf.clear();
+        tab.right_buf.clear();
+        tab.base_buf.clear();
+        tab.diff_result = None;
+        tab.three_way_result = None;
+        tab.is_three_way = false;
+        tab.is_dir_compare = true;
+        tab.dir_result = Some(result);
+        tab.has_unsaved_changes = false;
+        tab.h_scroll = 0;
+        tab.scroll_offset = 0;
+        tab.undo_stack.clear();
+        tab.redo_stack.clear();
+    }
+
+    pub fn dir_next(&mut self) {
+        let tab = self.active_tab_mut();
+        if let Some(ref mut r) = tab.dir_result {
+            if r.selected + 1 < r.entries.len() {
+                r.selected += 1;
+            }
+        }
+    }
+
+    pub fn dir_prev(&mut self) {
+        let tab = self.active_tab_mut();
+        if let Some(ref mut r) = tab.dir_result {
+            if r.selected > 0 {
+                r.selected -= 1;
+            }
+        }
+    }
+
+    pub fn dir_open_selected(&mut self) {
+        let tab = self.active_tab();
+        if !tab.is_dir_compare {
+            return;
+        }
+        let dir_result = match &tab.dir_result {
+            Some(r) => r,
+            None => return,
+        };
+        let entry = match dir_result.entries.get(dir_result.selected) {
+            Some(e) => e,
+            None => return,
+        };
+        use crate::models::diff_line::DirEntryStatus;
+        let rel = entry.rel_path.clone();
+        let status = entry.status.clone();
+
+        if let Some(ref gc) = dir_result.git_context {
+            let repo = gc.repo.clone();
+            let ref1 = gc.ref1.clone();
+            let ref2 = gc.ref2.clone();
+
+            self.new_tab();
+            match status {
+                DirEntryStatus::LeftOnly => {
+                    let left = extract_git_file(&repo, &ref1, &rel).unwrap_or_default();
+                    self.active_tab_mut().open_files(left, PathBuf::new());
+                }
+                DirEntryStatus::RightOnly => {
+                    let right = if let Some(ref r2) = ref2 {
+                        extract_git_file(&repo, r2, &rel).unwrap_or_default()
+                    } else {
+                        repo.join(&rel)
+                    };
+                    self.active_tab_mut().open_files(PathBuf::new(), right);
+                }
+                _ => {
+                    let left = extract_git_file(&repo, &ref1, &rel).unwrap_or_default();
+                    let right = if let Some(ref r2) = ref2 {
+                        extract_git_file(&repo, r2, &rel).unwrap_or_default()
+                    } else {
+                        repo.join(&rel)
+                    };
+                    self.active_tab_mut().open_files(left, right);
+                }
+            }
+        } else {
+            let left_dir = dir_result.left_dir.clone();
+            let right_dir = dir_result.right_dir.clone();
+            let left_path = left_dir.join(&rel);
+            let right_path = right_dir.join(&rel);
+
+            self.new_tab();
+            match status {
+                DirEntryStatus::LeftOnly => {
+                    self.active_tab_mut().open_files(left_path, PathBuf::new());
+                }
+                DirEntryStatus::RightOnly => {
+                    self.active_tab_mut().open_files(PathBuf::new(), right_path);
+                }
+                _ => {
+                    self.active_tab_mut().open_files(left_path, right_path);
+                }
+            }
+        }
+    }
+
     pub fn enter_edit_mode(&mut self, panel: PanelSide, display_line: usize, col: usize) {
         self.active_tab_mut()
             .enter_edit_mode(panel, display_line, col);
@@ -1320,6 +1485,32 @@ impl App {
             }
         }
         None
+    }
+
+    /// Mergetool mode: write base (middle) panel directly to output_path.
+    /// Returns true on success.
+    pub fn save_to_output(&mut self) -> bool {
+        let path = match &self.output_path {
+            Some(p) => p.clone(),
+            None => return false,
+        };
+        let text = buf_to_text(&self.active_tab().base_buf);
+        match fs::write(&path, text) {
+            Ok(()) => {
+                self.output_saved = true;
+                self.active_tab_mut().has_unsaved_changes = false;
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.to_string_lossy().to_string());
+                self.set_status(&format!("Saved to {}", name));
+                true
+            }
+            Err(e) => {
+                self.set_status(&format!("Save failed: {}", e));
+                false
+            }
+        }
     }
 
     /// Start save flow — always opens file browser dialog for confirmation.

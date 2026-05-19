@@ -19,14 +19,16 @@ src/
 │   ├── tab_bar.rs       # Tab bar rendering + mouse hit-test
 │   ├── diff_view.rs     # 2-way side-by-side diff rendering + raw text editing
 │   ├── three_way_view.rs # 3-way merge rendering (Left|Base|Right) + raw text editing
+│   ├── dir_view.rs      # Directory comparison list rendering
 │   └── status_bar.rs
 ├── diff/
 │   ├── mod.rs
 │   ├── engine.rs        # 2-way diff (similar crate, Myers/Patience)
-│   └── three_way.rs     # 3-way merge (base↔left, base↔right hunk merge)
+│   ├── three_way.rs     # 3-way merge (base↔left, base↔right hunk merge)
+│   └── dir_compare.rs  # Directory scanning + classification (Changed/LeftOnly/RightOnly/Equal)
 ├── file_browser.rs      # File browser dialog (open/save)
 └── models/
-    └── diff_line.rs     # DiffLine, DiffResult, ThreeWayLine, ThreeWayResult
+    └── diff_line.rs     # DiffLine, DiffResult, ThreeWayLine, ThreeWayResult, DirEntry, DirCompareResult
 ```
 
 ## Development
@@ -34,7 +36,7 @@ src/
 ```bash
 cargo build                                    # Build
 cargo test                                     # Run tests (48 tests)
-cargo run -- <left> <right>                    # 2-way diff
+cargo run -- <left> <right>                    # 2-way diff (files or dirs)
 cargo run -- <left> <base> <right>             # 3-way merge
 cargo run                                      # Blank screen, click or 'i' to edit
 ```
@@ -49,6 +51,7 @@ cargo run                                      # Blank screen, click or 'i' to e
 - **3-way copy targets Base**: In 3-way mode, Alt+Right = Left→Base, Alt+Left = Right→Base.
 - **h_scroll**: Horizontal scroll offset per tab. Applied via `Paragraph::scroll((0, h_scroll))`. Reset on file open.
 - **select_all**: Bool per tab. When true, copy_left_to_right/right_to_left copies all diffs instead of current. Cleared after copy.
+- **Dir compare**: TabState.is_dir_compare flag. DirCompareResult holds entry list + selected index. Scroll computed per-frame in dir_view::draw. Enter key opens selected entry in new tab as 2-way diff.
 
 ## Key Bindings
 
@@ -67,6 +70,10 @@ cargo run                                      # Blank screen, click or 'i' to e
 - `F9` — Toggle whitespace ignore
 - `Ctrl+I` — Toggle case ignore
 - `q` / `Ctrl+Q` — Quit
+
+### Dir Compare Mode
+- `↑`/`↓` / `j`/`k` — Navigate list
+- `Enter` — Open selected file pair in new tab
 
 ## Workflow Best Practices
 

@@ -1,6 +1,6 @@
 [package]
 name = "txmerge"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 description = "TUI diff and merge tool"
 
@@ -10,3 +10,4 @@ crossterm = "0.28"
 similar = "2.6"
 clap = { version = "4", features = ["derive"] }
 unicode-width = "0.2"
+chrono = "0.4"

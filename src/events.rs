@@ -23,8 +23,24 @@ pub fn handle_events(app: &mut App) -> std::io::Result<bool> {
                 MouseEventKind::Down(MouseButton::Left) => {
                     handle_mouse_click(app, mouse.column, mouse.row);
                 }
-                MouseEventKind::ScrollUp => app.scroll_up(3),
-                MouseEventKind::ScrollDown => app.scroll_down(3),
+                MouseEventKind::ScrollUp => {
+                    if app.active_tab().is_dir_compare {
+                        for _ in 0..3 {
+                            app.dir_prev();
+                        }
+                    } else {
+                        app.scroll_up(3);
+                    }
+                }
+                MouseEventKind::ScrollDown => {
+                    if app.active_tab().is_dir_compare {
+                        for _ in 0..3 {
+                            app.dir_next();
+                        }
+                    } else {
+                        app.scroll_down(3);
+                    }
+                }
                 _ => {}
             },
             _ => {}
@@ -78,6 +94,39 @@ fn handle_mouse_click(app: &mut App, x: u16, y: u16) {
                             }
                         } else {
                             browser.selected = clicked_idx;
+                        }
+                    }
+                }
+                return;
+            }
+        }
+    }
+
+    // Dir compare list click
+    if app.active_tab().is_dir_compare {
+        if let Some(rect) = ui::dir_view::dir_list_rect() {
+            if x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height {
+                let header_rows = 2u16; // header + separator
+                if y >= rect.y + header_rows {
+                    let row = (y - rect.y - header_rows) as usize;
+                    // Compute display scroll_offset matching the draw function's logic
+                    let list_capacity = (rect.height as usize).saturating_sub(header_rows as usize);
+                    let scroll_offset = if let Some(ref r) = app.active_tab().dir_result {
+                        if r.selected < r.scroll_offset {
+                            r.selected
+                        } else if list_capacity > 0 && r.selected >= r.scroll_offset + list_capacity
+                        {
+                            r.selected + 1 - list_capacity
+                        } else {
+                            r.scroll_offset
+                        }
+                    } else {
+                        0
+                    };
+                    let clicked = scroll_offset + row;
+                    if let Some(ref mut r) = app.active_tab_mut().dir_result {
+                        if clicked < r.entries.len() {
+                            r.selected = clicked;
                         }
                     }
                 }
@@ -203,6 +252,12 @@ fn hit_test_panel(app: &App, x: u16, y: u16) -> Option<(PanelSide, usize, usize)
 }
 
 fn handle_normal_mode(app: &mut App, key: KeyEvent) {
+    // Dir compare mode: delegate entirely
+    if app.active_tab().is_dir_compare {
+        handle_dir_compare_mode(app, key);
+        return;
+    }
+
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     let alt = key.modifiers.contains(KeyModifiers::ALT);
     let shift = key.modifiers.contains(KeyModifiers::SHIFT);
@@ -210,10 +265,11 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
     match key.code {
         // === Quit: Ctrl+Q ===
         KeyCode::Char('q') if ctrl => {
-            if app.any_unsaved() {
-                app.mode = AppMode::SaveConfirm;
-            } else {
+            // In mergetool mode, just exit (main.rs sets exit code from output_saved)
+            if app.output_path.is_some() || !app.any_unsaved() {
                 app.should_quit = true;
+            } else {
+                app.mode = AppMode::SaveConfirm;
             }
         }
 
@@ -247,7 +303,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         }
         // Save: Ctrl+S
         KeyCode::Char('s') if ctrl => {
-            app.save_files();
+            do_save(app);
         }
         // Refresh: F5, Ctrl+R
         KeyCode::F(5) => refresh_files(app),
@@ -329,6 +385,49 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
     }
 }
 
+fn handle_dir_compare_mode(app: &mut App, key: KeyEvent) {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let alt = key.modifiers.contains(KeyModifiers::ALT);
+
+    match key.code {
+        // Quit
+        KeyCode::Char('q') if ctrl => {
+            app.should_quit = true;
+        }
+        KeyCode::Char('q') => {
+            app.should_quit = true;
+        }
+        // Tab management
+        KeyCode::Char('t') if ctrl => app.new_tab(),
+        KeyCode::Char('w') if ctrl => {
+            if app.tabs.len() > 1 {
+                app.close_tab();
+            }
+        }
+        KeyCode::PageDown if ctrl => app.next_tab(),
+        KeyCode::PageUp if ctrl => app.prev_tab(),
+        KeyCode::Char('s') if ctrl => do_save(app),
+        // Vertical navigation
+        KeyCode::Down | KeyCode::Char('j') => app.dir_next(),
+        KeyCode::Up | KeyCode::Char('k') => app.dir_prev(),
+        // Horizontal scroll
+        KeyCode::Right if !ctrl && !alt => app.h_scroll_right(4),
+        KeyCode::Left if !ctrl && !alt => app.h_scroll_left(4),
+        // Open selected entry
+        KeyCode::Enter => app.dir_open_selected(),
+        _ => {}
+    }
+}
+
+/// Save: use direct write when --output is set (mergetool), otherwise open dialog.
+fn do_save(app: &mut App) {
+    if app.output_path.is_some() {
+        app.save_to_output();
+    } else {
+        app.save_files();
+    }
+}
+
 fn refresh_files(app: &mut App) {
     // If in editing mode, commit current edit state first
     let was_editing = app.mode == AppMode::Editing;
@@ -388,7 +487,7 @@ fn handle_editing_mode(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('s') if ctrl => {
             app.exit_edit_mode();
-            app.save_files();
+            do_save(app);
         }
         KeyCode::Char(c) if !ctrl && !alt => app.edit_insert_char(c),
         _ => {}
@@ -660,7 +759,7 @@ fn execute_menu_action(app: &mut App, action: MenuAction) {
             refresh_files(app);
         }
         MenuAction::Save => {
-            app.save_files();
+            do_save(app);
         }
         MenuAction::PrevDiff => app.prev_diff(),
         MenuAction::NextDiff => app.next_diff(),

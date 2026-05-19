@@ -15,28 +15,94 @@ struct MenuItem {
 /// Canonical menu item list -- used by both draw() and hit_test()
 fn menu_items() -> Vec<MenuItem> {
     vec![
-        MenuItem { label: " New", action: Some(MenuAction::New) },
-        MenuItem { label: " ", action: None },
-        MenuItem { label: "Open", action: Some(MenuAction::Open) },
-        MenuItem { label: " ", action: None },
-        MenuItem { label: "Save", action: Some(MenuAction::Save) },
-        MenuItem { label: " ", action: None },
-        MenuItem { label: "Ref", action: Some(MenuAction::Refresh) },
-        MenuItem { label: " \u{2502} ", action: None },
-        MenuItem { label: "Prev", action: Some(MenuAction::PrevDiff) },
-        MenuItem { label: " ", action: None },
-        MenuItem { label: "Next", action: Some(MenuAction::NextDiff) },
-        MenuItem { label: " \u{2502} ", action: None },
-        MenuItem { label: "LtR", action: Some(MenuAction::CopyLeftToRight) },
-        MenuItem { label: " ", action: None },
-        MenuItem { label: "RtL", action: Some(MenuAction::CopyRightToLeft) },
-        MenuItem { label: " \u{2502} ", action: None },
-        MenuItem { label: "AllSel", action: Some(MenuAction::SelectAll) },
-        MenuItem { label: " \u{2502} ", action: None },
-        MenuItem { label: "ws", action: Some(MenuAction::ToggleWhitespace) },
-        MenuItem { label: " ", action: None },
-        MenuItem { label: "Aa", action: Some(MenuAction::ToggleCase) },
-        MenuItem { label: " ", action: None },
+        MenuItem {
+            label: " New",
+            action: Some(MenuAction::New),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "Open",
+            action: Some(MenuAction::Open),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "Save",
+            action: Some(MenuAction::Save),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "Ref",
+            action: Some(MenuAction::Refresh),
+        },
+        MenuItem {
+            label: " \u{2502} ",
+            action: None,
+        },
+        MenuItem {
+            label: "Prev",
+            action: Some(MenuAction::PrevDiff),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "Next",
+            action: Some(MenuAction::NextDiff),
+        },
+        MenuItem {
+            label: " \u{2502} ",
+            action: None,
+        },
+        MenuItem {
+            label: "LtR",
+            action: Some(MenuAction::CopyLeftToRight),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "RtL",
+            action: Some(MenuAction::CopyRightToLeft),
+        },
+        MenuItem {
+            label: " \u{2502} ",
+            action: None,
+        },
+        MenuItem {
+            label: "AllSel",
+            action: Some(MenuAction::SelectAll),
+        },
+        MenuItem {
+            label: " \u{2502} ",
+            action: None,
+        },
+        MenuItem {
+            label: "ws",
+            action: Some(MenuAction::ToggleWhitespace),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
+        MenuItem {
+            label: "Aa",
+            action: Some(MenuAction::ToggleCase),
+        },
+        MenuItem {
+            label: " ",
+            action: None,
+        },
     ]
 }
 

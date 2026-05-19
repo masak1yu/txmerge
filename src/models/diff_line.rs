@@ -53,3 +53,41 @@ pub struct ThreeWayResult {
     pub conflict_count: u32,
     pub diff_positions: Vec<usize>,
 }
+
+// Directory comparison types
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DirEntryStatus {
+    LeftOnly,
+    RightOnly,
+    Equal,
+    Changed,
+}
+
+#[derive(Debug, Clone)]
+pub struct DirEntry {
+    pub rel_path: std::path::PathBuf,
+    pub status: DirEntryStatus,
+    pub left_modified: Option<std::time::SystemTime>,
+    pub right_modified: Option<std::time::SystemTime>,
+    pub left_size: Option<u64>,
+    pub right_size: Option<u64>,
+}
+
+/// Git context attached to a DirCompareResult when in --git mode.
+#[derive(Debug, Clone)]
+pub struct GitContext {
+    pub repo: std::path::PathBuf,
+    pub ref1: String,
+    pub ref2: Option<String>, // None = working tree
+}
+
+#[derive(Debug, Clone)]
+pub struct DirCompareResult {
+    pub left_dir: std::path::PathBuf,
+    pub right_dir: std::path::PathBuf,
+    pub entries: Vec<DirEntry>,
+    pub selected: usize,
+    pub scroll_offset: usize,
+    pub git_context: Option<GitContext>,
+}

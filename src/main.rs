@@ -22,51 +22,91 @@ use app::App;
 #[derive(Parser)]
 #[command(name = "txmerge", version, about = "TUI diff and merge tool")]
 struct Cli {
-    /// File paths: <left> <right> for 2-way, <left> <base> <right> for 3-way
+    /// Paths: <left> <right> (files or dirs for 2-way), <left> <base> <right> for 3-way.
+    /// In --git mode: optional [ref1] [ref2] (default: HEAD vs working tree).
     files: Vec<PathBuf>,
+
+    /// Output path for merge result (git mergetool use). Ctrl+S writes base panel here.
+    #[arg(short, long, value_name = "PATH")]
+    output: Option<PathBuf>,
+
+    /// Show git branch/commit comparison as a directory listing.
+    #[arg(long)]
+    git: bool,
+
+    /// Git repository path (default: current directory).
+    #[arg(long, value_name = "PATH", default_value = ".")]
+    repo: PathBuf,
 }
 
-fn main() -> io::Result<()> {
+fn main() {
     let cli = Cli::parse();
 
     // Setup terminal
-    enable_raw_mode()?;
+    enable_raw_mode().expect("enable raw mode");
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture).expect("enter alternate screen");
     let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+    let mut terminal = Terminal::new(backend).expect("create terminal");
 
     let mut app = App::new();
 
-    // Open files if provided via CLI
-    match cli.files.len() {
-        2 => {
-            let left = cli.files[0].clone();
-            let right = cli.files[1].clone();
-            app.active_tab_mut().open_files(left, right);
-        }
-        3 => {
-            let left = cli.files[0].clone();
-            let base = cli.files[1].clone();
-            let right = cli.files[2].clone();
-            app.active_tab_mut().open_files_3way(left, base, right);
-        }
-        _ => {} // No files -- start with blank screen
+    if let Some(out) = cli.output {
+        app.output_path = Some(out);
     }
 
-    // Main loop
+    // Open files/directories if provided via CLI
+    if cli.git {
+        let repo = cli.repo.canonicalize().unwrap_or(cli.repo);
+        let (ref1, ref2) = match cli.files.len() {
+            0 => ("HEAD".to_string(), None),
+            1 => (cli.files[0].to_string_lossy().to_string(), None),
+            _ => (
+                cli.files[0].to_string_lossy().to_string(),
+                Some(cli.files[1].to_string_lossy().to_string()),
+            ),
+        };
+        app.open_git_diff(repo, ref1, ref2);
+    } else {
+        match cli.files.len() {
+            2 => {
+                let left = cli.files[0].clone();
+                let right = cli.files[1].clone();
+                if left.is_dir() && right.is_dir() {
+                    app.open_dirs(left, right);
+                } else {
+                    app.active_tab_mut().open_files(left, right);
+                }
+            }
+            3 => {
+                let left = cli.files[0].clone();
+                let base = cli.files[1].clone();
+                let right = cli.files[2].clone();
+                app.active_tab_mut().open_files_3way(left, base, right);
+            }
+            _ => {}
+        }
+    }
+
     let result = run_app(&mut terminal, &mut app);
 
     // Restore terminal
-    disable_raw_mode()?;
+    disable_raw_mode().expect("disable raw mode");
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
         DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
+    )
+    .expect("leave alternate screen");
+    terminal.show_cursor().expect("show cursor");
 
-    result
+    // Exit code: 1 if mergetool mode but user quit without saving
+    let exit_code = match result {
+        Err(_) => 1,
+        Ok(()) if app.output_path.is_some() && !app.output_saved => 1,
+        Ok(()) => 0,
+    };
+    std::process::exit(exit_code);
 }
 
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> io::Result<()> {

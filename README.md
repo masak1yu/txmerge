@@ -8,6 +8,8 @@ A TUI diff and merge tool written in Rust. Inspired by WinMerge/WinXMerge, provi
 
 - **2-way diff** - Side-by-side comparison with word-level highlighting
 - **3-way merge** - Left / Base / Right panel layout with conflict detection
+- **Directory comparison** - Browse changed/added/deleted files between two directories
+- **Git integration** - Compare branches or commits as a directory listing; open individual files as 2-way diff; use as `git difftool` and `git mergetool`
 - **Inline editing** - Click or press `i` to edit any panel directly
 - **Tab management** - Multiple comparison tabs with independent state
 - **3-way copy** - Left→Base / Right→Base copy operations for merge resolution
@@ -34,9 +36,61 @@ txmerge <left-file> <right-file>
 # 3-way merge
 txmerge <left-file> <base-file> <right-file>
 
+# Directory comparison
+txmerge <left-dir> <right-dir>
+
+# Git branch/commit comparison (shows directory listing first)
+txmerge --git HEAD~1 HEAD
+txmerge --git feature main
+txmerge --git HEAD              # HEAD vs working tree
+txmerge --git --repo /path/to/repo HEAD main
+
 # Interactive mode (press 'o' to open files)
 txmerge
 ```
+
+## Git Integration
+
+### As git difftool
+
+Add to `~/.gitconfig`:
+
+```ini
+[diff]
+    tool = txmerge
+[difftool "txmerge"]
+    cmd = txmerge "$LOCAL" "$REMOTE"
+```
+
+Then use with:
+
+```bash
+git difftool HEAD~1 HEAD -- path/to/file.rs
+```
+
+### As git mergetool
+
+Add to `~/.gitconfig`:
+
+```ini
+[merge]
+    tool = txmerge
+[mergetool "txmerge"]
+    cmd = txmerge "$LOCAL" "$BASE" "$REMOTE" --output "$MERGED"
+    trustExitCode = true
+```
+
+Then use with:
+
+```bash
+git mergetool
+```
+
+txmerge opens a 3-way merge view. Press `Ctrl+S` to save the resolved result and exit with code 0. Quitting without saving exits with code 1 (conflict unresolved).
+
+### Branch comparison with --git
+
+`txmerge --git [ref1] [ref2] [--repo <path>]` runs `git diff --name-status` and displays the results as a directory listing. Press Enter on any file to open it as a 2-way diff in a new tab (files are extracted via `git show`).
 
 ## Toolbar
 
@@ -121,6 +175,16 @@ Press `AllSel` (turns green) to enter select-all mode, then press `LtR` or `RtL`
 | `Ctrl+Y` | Redo |
 | `Ctrl+Q` | Quit |
 
+### Directory Compare Mode
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` / `j` / `k` | Navigate file list |
+| `→` / `←` | Horizontal scroll |
+| `Enter` | Open selected file pair in new tab |
+| `Ctrl+T` | New tab |
+| `Ctrl+Q` | Quit |
+
 ### Options
 
 | Key | Action |
@@ -134,6 +198,7 @@ Press `AllSel` (turns green) to enter select-all mode, then press `LtR` or `RtL`
 - [crossterm](https://github.com/crossterm-rs/crossterm) - Terminal manipulation
 - [similar](https://github.com/mitsuhiko/similar) - Diff algorithm (Myers/Patience)
 - [clap](https://github.com/clap-rs/clap) - CLI argument parsing
+- [chrono](https://github.com/chronotope/chrono) - Timezone-aware timestamp formatting
 
 ## License
 
