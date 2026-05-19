@@ -379,6 +379,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
 
 fn handle_dir_compare_mode(app: &mut App, key: KeyEvent) {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let alt  = key.modifiers.contains(KeyModifiers::ALT);
 
     match key.code {
         // Quit
@@ -397,9 +398,12 @@ fn handle_dir_compare_mode(app: &mut App, key: KeyEvent) {
         }
         KeyCode::PageDown if ctrl => app.next_tab(),
         KeyCode::PageUp if ctrl => app.prev_tab(),
-        // Navigation
+        // Vertical navigation
         KeyCode::Down | KeyCode::Char('j') => app.dir_next(),
         KeyCode::Up | KeyCode::Char('k') => app.dir_prev(),
+        // Horizontal scroll
+        KeyCode::Right if !ctrl && !alt => app.h_scroll_right(4),
+        KeyCode::Left  if !ctrl && !alt => app.h_scroll_left(4),
         // Open selected entry
         KeyCode::Enter => app.dir_open_selected(),
         _ => {}

@@ -140,7 +140,8 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         lines.push(line);
     }
 
-    f.render_widget(Paragraph::new(lines), inner);
+    let h = tab.h_scroll as u16;
+    f.render_widget(Paragraph::new(lines).scroll((0, h)), inner);
 }
 
 fn build_row<'a>(
