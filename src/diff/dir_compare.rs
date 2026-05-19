@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 use std::{fs, io};
 
 use crate::models::diff_line::{DirCompareResult, DirEntry, DirEntryStatus};
@@ -18,12 +19,16 @@ pub fn scan_dirs(left: &Path, right: &Path) -> DirCompareResult {
 
     let mut entries = Vec::new();
     for (rel, (in_left, in_right)) in map {
+        let lp = left.join(&rel);
+        let rp = right.join(&rel);
+
+        let (left_modified, left_size) = if in_left { file_meta(&lp) } else { (None, None) };
+        let (right_modified, right_size) = if in_right { file_meta(&rp) } else { (None, None) };
+
         let status = match (in_left, in_right) {
             (true, false) => DirEntryStatus::LeftOnly,
             (false, true) => DirEntryStatus::RightOnly,
             _ => {
-                let lp = left.join(&rel);
-                let rp = right.join(&rel);
                 if files_equal(&lp, &rp) {
                     DirEntryStatus::Equal
                 } else {
@@ -31,7 +36,14 @@ pub fn scan_dirs(left: &Path, right: &Path) -> DirCompareResult {
                 }
             }
         };
-        entries.push(DirEntry { rel_path: rel, status });
+        entries.push(DirEntry {
+            rel_path: rel,
+            status,
+            left_modified,
+            right_modified,
+            left_size,
+            right_size,
+        });
     }
 
     DirCompareResult {
@@ -40,6 +52,13 @@ pub fn scan_dirs(left: &Path, right: &Path) -> DirCompareResult {
         entries,
         selected: 0,
         scroll_offset: 0,
+    }
+}
+
+fn file_meta(path: &Path) -> (Option<SystemTime>, Option<u64>) {
+    match fs::metadata(path) {
+        Ok(m) => (m.modified().ok(), Some(m.len())),
+        Err(_) => (None, None),
     }
 }
 
@@ -66,9 +85,7 @@ fn visit_dir(root: &Path, current: &Path, out: &mut Vec<PathBuf>) -> io::Result<
 }
 
 fn files_equal(a: &Path, b: &Path) -> bool {
-    let ra = fs::read(a);
-    let rb = fs::read(b);
-    match (ra, rb) {
+    match (fs::read(a), fs::read(b)) {
         (Ok(ca), Ok(cb)) => ca == cb,
         _ => false,
     }

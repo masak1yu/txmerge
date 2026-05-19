@@ -68,6 +68,10 @@ pub enum DirEntryStatus {
 pub struct DirEntry {
     pub rel_path: std::path::PathBuf,
     pub status: DirEntryStatus,
+    pub left_modified: Option<std::time::SystemTime>,
+    pub right_modified: Option<std::time::SystemTime>,
+    pub left_size: Option<u64>,
+    pub right_size: Option<u64>,
 }
 
 #[derive(Debug, Clone)]

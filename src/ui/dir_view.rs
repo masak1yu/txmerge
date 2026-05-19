@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -20,6 +22,15 @@ pub fn reset_dir_list_rect() {
     }
 }
 
+// Column widths (fixed)
+const W_STATUS: usize = 4;
+const W_DATE: usize = 16; // "YYYY-MM-DD HH:MM"
+const W_SIZE: usize = 9;  // "1023.9 MB"
+const W_SEP: usize = 1;
+// path width = inner.width - W_STATUS - W_SEP - W_DATE - W_SEP - W_SIZE - W_SEP - W_DATE - W_SEP - W_SIZE - W_SEP
+// = inner.width - (4+1+16+1+9+1+16+1+9+1) = inner.width - 59
+const FIXED_COLS: usize = W_STATUS + W_SEP + W_DATE + W_SEP + W_SIZE + W_SEP + W_DATE + W_SEP + W_SIZE + W_SEP;
+
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let tab = app.active_tab();
     let result = match &tab.dir_result {
@@ -27,16 +38,11 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         None => return,
     };
 
-    let left_name = result
-        .left_dir
-        .to_string_lossy()
-        .to_string();
-    let right_name = result
-        .right_dir
-        .to_string_lossy()
-        .to_string();
-
-    let title = format!(" {} <-> {} ", left_name, right_name);
+    let title = format!(
+        " {} <-> {} ",
+        result.left_dir.to_string_lossy(),
+        result.right_dir.to_string_lossy()
+    );
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
@@ -45,10 +51,10 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(block, area);
 
     let visible_height = inner.height as usize;
+    let path_width = (inner.width as usize).saturating_sub(FIXED_COLS).max(10);
 
-    // Compute display scroll_offset so selected is always visible.
-    // header(1) + separator(1) = 2 overhead rows
-    let list_capacity = visible_height.saturating_sub(2);
+    // Compute display scroll_offset so selected is always visible
+    let list_capacity = visible_height.saturating_sub(2); // header + separator
     let scroll_offset = if list_capacity == 0 {
         0
     } else if result.selected < result.scroll_offset {
@@ -63,50 +69,29 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         DIR_LIST_RECT = Some(inner);
     }
 
-    let changed_count = result
-        .entries
-        .iter()
-        .filter(|e| e.status == DirEntryStatus::Changed)
-        .count();
-    let left_only_count = result
-        .entries
-        .iter()
-        .filter(|e| e.status == DirEntryStatus::LeftOnly)
-        .count();
-    let right_only_count = result
-        .entries
-        .iter()
-        .filter(|e| e.status == DirEntryStatus::RightOnly)
-        .count();
-
-    // Header row
+    // Header
     let header_style = Style::default()
         .fg(Color::Rgb(150, 150, 170))
         .add_modifier(Modifier::BOLD);
-    let header = Line::from(vec![
-        Span::styled(
-            format!("{:<4} ", ""),
-            header_style,
-        ),
-        Span::styled(
-            format!(
-                "{}  Changed:{} LeftOnly:{} RightOnly:{}",
-                " Status", changed_count, left_only_count, right_only_count
-            ),
-            header_style,
-        ),
-    ]);
+    let header = build_row(
+        "St. ",
+        &truncate_pad("Path", path_width),
+        &format!("{:<width$}", "Left Modified", width = W_DATE),
+        &format!("{:>width$}", "Left Size", width = W_SIZE),
+        &format!("{:<width$}", "Right Modified", width = W_DATE),
+        &format!("{:>width$}", "Right Size", width = W_SIZE),
+        header_style,
+        header_style,
+    );
 
-    // Separator
-    let sep = Line::from(Span::styled(
+    let sep_line = Line::from(Span::styled(
         "\u{2500}".repeat(inner.width as usize),
         Style::default().fg(Color::Rgb(60, 60, 70)),
     ));
 
-    let mut lines: Vec<Line> = vec![header, sep];
+    let mut lines: Vec<Line> = vec![header, sep_line];
 
     let list_height = list_capacity;
-
     for (i, entry) in result
         .entries
         .iter()
@@ -117,33 +102,145 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         let is_selected = i == result.selected;
 
         let (status_label, status_color) = match entry.status {
-            DirEntryStatus::Changed => ("!=  ", Color::Rgb(220, 180, 80)),
-            DirEntryStatus::LeftOnly => ("<   ", Color::Rgb(100, 160, 240)),
-            DirEntryStatus::RightOnly => ("  > ", Color::Rgb(100, 200, 130)),
-            DirEntryStatus::Equal => ("==  ", Color::Rgb(80, 80, 80)),
+            DirEntryStatus::Changed  => ("!= \u{2502}", Color::Rgb(220, 180, 80)),
+            DirEntryStatus::LeftOnly => ("<  \u{2502}", Color::Rgb(100, 160, 240)),
+            DirEntryStatus::RightOnly=> (">  \u{2502}", Color::Rgb(100, 200, 130)),
+            DirEntryStatus::Equal    => ("== \u{2502}", Color::Rgb(80, 80, 80)),
         };
 
-        let path_str = entry.rel_path.to_string_lossy().to_string();
+        let path_str = truncate_pad(
+            &entry.rel_path.to_string_lossy(),
+            path_width,
+        );
+        let left_date  = fmt_time_opt(entry.left_modified, W_DATE);
+        let left_size  = fmt_size_opt(entry.left_size, W_SIZE);
+        let right_date = fmt_time_opt(entry.right_modified, W_DATE);
+        let right_size = fmt_size_opt(entry.right_size, W_SIZE);
 
-        let (bg, fg) = if is_selected {
+        let (bg, text_fg) = if is_selected {
             (Color::Rgb(50, 70, 100), Color::White)
         } else {
             (Color::Reset, Color::Rgb(200, 200, 200))
         };
 
-        let line = Line::from(vec![
-            Span::styled(
-                status_label,
-                Style::default().fg(status_color).bg(bg),
-            ),
-            Span::styled(
-                format!(" {}", path_str),
-                Style::default().fg(fg).bg(bg),
-            ),
-        ]);
+        let status_style = Style::default().fg(status_color).bg(bg);
+        let text_style   = Style::default().fg(text_fg).bg(bg);
+
+        let line = build_row(
+            status_label,
+            &path_str,
+            &left_date,
+            &left_size,
+            &right_date,
+            &right_size,
+            status_style,
+            text_style,
+        );
         lines.push(line);
     }
 
-    let para = Paragraph::new(lines);
-    f.render_widget(para, inner);
+    f.render_widget(Paragraph::new(lines), inner);
+}
+
+fn build_row<'a>(
+    status: &'a str,
+    path: &str,
+    left_date: &str,
+    left_size: &str,
+    right_date: &str,
+    right_size: &str,
+    status_style: Style,
+    text_style: Style,
+) -> Line<'a> {
+    let dim = Style::default()
+        .fg(Color::Rgb(90, 90, 110))
+        .bg(text_style.bg.unwrap_or(Color::Reset));
+    Line::from(vec![
+        Span::styled(status.to_string(), status_style),
+        Span::styled(" ", text_style),
+        Span::styled(path.to_string(), text_style),
+        Span::styled(" ", text_style),
+        Span::styled(left_date.to_string(), text_style),
+        Span::styled(" ", dim),
+        Span::styled(left_size.to_string(), text_style),
+        Span::styled(" ", dim),
+        Span::styled(right_date.to_string(), text_style),
+        Span::styled(" ", dim),
+        Span::styled(right_size.to_string(), text_style),
+    ])
+}
+
+fn truncate_pad(s: &str, width: usize) -> String {
+    let len = s.chars().count();
+    if len >= width {
+        s.chars().take(width.saturating_sub(1)).collect::<String>() + "…"
+    } else {
+        format!("{:<width$}", s)
+    }
+}
+
+fn fmt_time_opt(t: Option<SystemTime>, width: usize) -> String {
+    match t {
+        Some(st) => {
+            let s = format_utc(st);
+            format!("{:<width$}", s)
+        }
+        None => format!("{:<width$}", "-"),
+    }
+}
+
+fn fmt_size_opt(size: Option<u64>, width: usize) -> String {
+    match size {
+        Some(b) => {
+            let s = format_size(b);
+            format!("{:>width$}", s)
+        }
+        None => format!("{:>width$}", "-"),
+    }
+}
+
+fn format_utc(t: SystemTime) -> String {
+    use std::time::UNIX_EPOCH;
+    let secs = match t.duration_since(UNIX_EPOCH) {
+        Ok(d) => d.as_secs(),
+        Err(_) => return "----/-- --:--".to_string(),
+    };
+    let (year, month, day, hour, min) = civil_from_epoch(secs);
+    format!("{:04}-{:02}-{:02} {:02}:{:02}", year, month, day, hour, min)
+}
+
+/// Civil date/time from UNIX epoch seconds (UTC).
+/// Algorithm: http://howardhinnant.com/date_algorithms.html
+fn civil_from_epoch(secs: u64) -> (u32, u32, u32, u32, u32) {
+    let time_of_day = secs % 86400;
+    let h = (time_of_day / 3600) as u32;
+    let m = ((time_of_day % 3600) / 60) as u32;
+
+    let days = (secs / 86400) as i64;
+    let z = days + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let mon = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let year = (yoe as i64 + era * 400 + if mon <= 2 { 1 } else { 0 }) as u32;
+
+    (year, mon, day, h, m)
+}
+
+fn format_size(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+    if bytes < KB {
+        format!("{} B", bytes)
+    } else if bytes < MB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else if bytes < GB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    }
 }
