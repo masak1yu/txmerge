@@ -22,7 +22,7 @@ use app::App;
 #[derive(Parser)]
 #[command(name = "txmerge", version, about = "TUI diff and merge tool")]
 struct Cli {
-    /// File paths: <left> <right> for 2-way, <left> <base> <right> for 3-way
+    /// Paths: <left> <right> (files or dirs for 2-way), <left> <base> <right> for 3-way
     files: Vec<PathBuf>,
 }
 
@@ -38,12 +38,16 @@ fn main() -> io::Result<()> {
 
     let mut app = App::new();
 
-    // Open files if provided via CLI
+    // Open files/directories if provided via CLI
     match cli.files.len() {
         2 => {
             let left = cli.files[0].clone();
             let right = cli.files[1].clone();
-            app.active_tab_mut().open_files(left, right);
+            if left.is_dir() && right.is_dir() {
+                app.open_dirs(left, right);
+            } else {
+                app.active_tab_mut().open_files(left, right);
+            }
         }
         3 => {
             let left = cli.files[0].clone();

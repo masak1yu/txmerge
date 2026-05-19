@@ -20,7 +20,22 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         .bg(Color::Rgb(30, 30, 40));
 
     let count = tab.diff_count();
-    let diff_info = if tab.is_three_way {
+    let diff_info = if tab.is_dir_compare {
+        if let Some(ref r) = tab.dir_result {
+            use crate::models::diff_line::DirEntryStatus;
+            let changed = r.entries.iter().filter(|e| e.status == DirEntryStatus::Changed).count();
+            let left_only = r.entries.iter().filter(|e| e.status == DirEntryStatus::LeftOnly).count();
+            let right_only = r.entries.iter().filter(|e| e.status == DirEntryStatus::RightOnly).count();
+            format!(
+                "Dir compare | Changed:{} LeftOnly:{} RightOnly:{} | {}/{} | Enter:open",
+                changed, left_only, right_only,
+                r.selected + 1,
+                r.entries.len()
+            )
+        } else {
+            "Directory compare".to_string()
+        }
+    } else if tab.is_three_way {
         if let Some(ref result) = tab.three_way_result {
             if result.diff_positions.is_empty() {
                 "Files are identical".to_string()
@@ -101,8 +116,11 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     } else if let Some(msg) = status_msg {
         Line::from(vec![Span::styled(" ", bg), Span::styled(msg, green)])
     } else {
-        let keys =
-            " ^O:open i:edit F7/F8:diff Alt+<->:copy ^S:save ^Z:undo ^T:new ^W:close ^Q:quit";
+        let keys = if tab.is_dir_compare {
+            " ↑↓/jk:navigate  Enter:open  ^T:new  ^W:close  ^Q:quit"
+        } else {
+            " ^O:open i:edit F7/F8:diff Alt+<->:copy ^S:save ^Z:undo ^T:new ^W:close ^Q:quit"
+        };
         Line::from(vec![
             Span::styled(" ", bg),
             Span::styled(diff_info, bg),

@@ -1,4 +1,5 @@
 pub mod diff_view;
+pub mod dir_view;
 pub mod menu_bar;
 pub mod status_bar;
 pub mod tab_bar;
@@ -33,6 +34,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     }
     diff_view::reset_panel_rects();
     three_way_view::reset_panel_rects();
+    dir_view::reset_dir_list_rect();
 
     let show_tabs = app.tabs.len() > 1;
 
@@ -67,7 +69,9 @@ pub fn draw(f: &mut Frame, app: &App) {
     };
 
     let tab = app.active_tab();
-    if tab.is_three_way {
+    if tab.is_dir_compare {
+        dir_view::draw(f, app, main_area);
+    } else if tab.is_three_way {
         three_way_view::draw(f, app, main_area);
     } else {
         diff_view::draw(f, app, main_area);

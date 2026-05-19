@@ -53,3 +53,28 @@ pub struct ThreeWayResult {
     pub conflict_count: u32,
     pub diff_positions: Vec<usize>,
 }
+
+// Directory comparison types
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DirEntryStatus {
+    LeftOnly,
+    RightOnly,
+    Equal,
+    Changed,
+}
+
+#[derive(Debug, Clone)]
+pub struct DirEntry {
+    pub rel_path: std::path::PathBuf,
+    pub status: DirEntryStatus,
+}
+
+#[derive(Debug, Clone)]
+pub struct DirCompareResult {
+    pub left_dir: std::path::PathBuf,
+    pub right_dir: std::path::PathBuf,
+    pub entries: Vec<DirEntry>,
+    pub selected: usize,
+    pub scroll_offset: usize,
+}

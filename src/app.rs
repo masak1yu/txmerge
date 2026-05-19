@@ -1,10 +1,13 @@
 use std::fs;
 use std::path::PathBuf;
 
+use crate::diff::dir_compare::scan_dirs;
 use crate::diff::engine::{DiffOptions, compute_diff};
 use crate::diff::three_way::compute_three_way_diff;
 use crate::file_browser::FileBrowser;
-use crate::models::diff_line::{DiffResult, LineStatus, ThreeWayResult, ThreeWayStatus};
+use crate::models::diff_line::{
+    DirCompareResult, DiffResult, LineStatus, ThreeWayResult, ThreeWayStatus,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppMode {
@@ -56,6 +59,8 @@ pub struct TabState {
     pub diff_result: Option<DiffResult>,
     pub three_way_result: Option<ThreeWayResult>,
     pub is_three_way: bool,
+    pub is_dir_compare: bool,
+    pub dir_result: Option<DirCompareResult>,
     pub diff_options: DiffOptions,
     pub current_diff: i32,
     pub scroll_offset: usize,
@@ -79,6 +84,8 @@ impl TabState {
             diff_result: None,
             three_way_result: None,
             is_three_way: false,
+            is_dir_compare: false,
+            dir_result: None,
             diff_options: DiffOptions::default(),
             current_diff: -1,
             scroll_offset: 0,
@@ -92,11 +99,39 @@ impl TabState {
     }
 
     pub fn title(&self) -> String {
+        if self.is_dir_compare {
+            return self
+                .left_path
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "Dirs".to_string());
+        }
         self.left_path
             .as_ref()
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "New".to_string())
+    }
+
+    pub fn open_dirs(&mut self, left: PathBuf, right: PathBuf) {
+        let result = scan_dirs(&left, &right);
+        self.left_path = Some(left);
+        self.right_path = Some(right);
+        self.base_path = None;
+        self.left_buf.clear();
+        self.right_buf.clear();
+        self.base_buf.clear();
+        self.diff_result = None;
+        self.three_way_result = None;
+        self.is_three_way = false;
+        self.is_dir_compare = true;
+        self.dir_result = Some(result);
+        self.has_unsaved_changes = false;
+        self.h_scroll = 0;
+        self.scroll_offset = 0;
+        self.undo_stack.clear();
+        self.redo_stack.clear();
     }
 
     pub fn open_files(&mut self, left: PathBuf, right: PathBuf) {
@@ -609,6 +644,8 @@ impl TabState {
         self.right_path = None;
         self.base_path = None;
         self.is_three_way = is_three_way;
+        self.is_dir_compare = false;
+        self.dir_result = None;
         self.has_unsaved_changes = false;
         self.h_scroll = 0;
         self.undo_stack.clear();
@@ -1237,6 +1274,66 @@ impl App {
 
     pub fn new_blank(&mut self, is_three_way: bool) {
         self.active_tab_mut().new_blank(is_three_way);
+    }
+
+    // === Directory comparison ===
+
+    pub fn open_dirs(&mut self, left: PathBuf, right: PathBuf) {
+        self.active_tab_mut().open_dirs(left, right);
+    }
+
+    pub fn dir_next(&mut self) {
+        let tab = self.active_tab_mut();
+        if let Some(ref mut r) = tab.dir_result {
+            if r.selected + 1 < r.entries.len() {
+                r.selected += 1;
+            }
+        }
+    }
+
+    pub fn dir_prev(&mut self) {
+        let tab = self.active_tab_mut();
+        if let Some(ref mut r) = tab.dir_result {
+            if r.selected > 0 {
+                r.selected -= 1;
+            }
+        }
+    }
+
+    pub fn dir_open_selected(&mut self) {
+        let tab = self.active_tab();
+        if !tab.is_dir_compare {
+            return;
+        }
+        let dir_result = match &tab.dir_result {
+            Some(r) => r,
+            None => return,
+        };
+        let entry = match dir_result.entries.get(dir_result.selected) {
+            Some(e) => e,
+            None => return,
+        };
+        use crate::models::diff_line::DirEntryStatus;
+        let left_dir = dir_result.left_dir.clone();
+        let right_dir = dir_result.right_dir.clone();
+        let rel = entry.rel_path.clone();
+        let status = entry.status.clone();
+
+        let left_path = left_dir.join(&rel);
+        let right_path = right_dir.join(&rel);
+
+        self.new_tab();
+        match status {
+            DirEntryStatus::LeftOnly => {
+                self.active_tab_mut().open_files(left_path, PathBuf::new());
+            }
+            DirEntryStatus::RightOnly => {
+                self.active_tab_mut().open_files(PathBuf::new(), right_path);
+            }
+            _ => {
+                self.active_tab_mut().open_files(left_path, right_path);
+            }
+        }
     }
 
     pub fn enter_edit_mode(&mut self, panel: PanelSide, display_line: usize, col: usize) {
