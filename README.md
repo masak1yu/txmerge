@@ -9,10 +9,11 @@ A TUI diff and merge tool written in Rust. Inspired by WinMerge/WinXMerge, provi
 - **Inline editing** - Click or press `i` to edit any panel directly
 - **Tab management** - Multiple comparison tabs with independent state
 - **3-way copy** - Left→Base / Right→Base copy operations for merge resolution
+- **Select-all mode** - Toggle AllSel to bulk-copy all diffs at once
 - **File browser dialog** - Browse directories and select files visually
 - **Save dialog** - Choose save location with directory browser and filename input
 - **WinMerge-compatible shortcuts** - F7/F8 navigation, Alt+Arrow copy operations
-- **Mouse support** - Click to edit, scroll wheel, toolbar icons, tab switching
+- **Mouse support** - Click to edit, scroll wheel, toolbar, tab switching
 - **Undo/Redo** - Full undo/redo support including 3-way base text
 - **Diff options** - Ignore whitespace, ignore case
 
@@ -35,23 +36,28 @@ txmerge <left-file> <base-file> <right-file>
 txmerge
 ```
 
-## Toolbar Icons
+## Toolbar
 
 ```
-📄 📂 💾 🔄 │ |< < > >| │ -> <- │ ->| |<- │ =>> <<= │ ws Aa
+New Open Save Ref │ Prev Next │ LtR RtL │ AllSel │ ws Aa
 ```
 
-| Icon | Action |
-|------|--------|
-| 📄 | New comparison (opens in new tab) |
-| 📂 | Open files |
-| 💾 | Save files |
-| 🔄 | Refresh comparison |
-| `|<` `<` `>` `>|` | First / Prev / Next / Last diff |
-| `->` `<-` | Copy left→right (2-way) or left→base / right→base (3-way) |
-| `->|` `|<-` | Copy and advance to next diff |
-| `=>>` `<<=` | Copy all |
+In 3-way mode, `LtR` and `RtL` become `LtM` and `RtM` (copy to Base/Middle).
+
+| Button | Action |
+|--------|--------|
+| `New` | New comparison (opens in new tab) |
+| `Open` | Open files |
+| `Save` | Save files |
+| `Ref` | Refresh comparison |
+| `Prev` `Next` | Previous / Next diff |
+| `LtR` `RtL` | Copy left→right / right→left (2-way); left→base / right→base (3-way) |
+| `AllSel` | Toggle select-all mode — next copy operation applies to all diffs |
 | `ws` `Aa` | Toggle whitespace / case ignore |
+
+### Select-all copy
+
+Press `AllSel` (turns green) to enter select-all mode, then press `LtR` or `RtL` to copy all diffs at once. The mode is cleared automatically after the copy.
 
 ## Key Bindings
 
@@ -77,6 +83,7 @@ txmerge
 | `Alt+End` / `Ctrl+End` | Last diff |
 | `j` / `Down` | Scroll down |
 | `k` / `Up` | Scroll up |
+| `→` / `←` | Scroll right / left (horizontal) |
 | `PageDown` / `PageUp` | Scroll by page |
 | Mouse scroll | Scroll 3 lines per tick |
 | `g` / `G` | Go to top / bottom |
@@ -87,8 +94,8 @@ txmerge
 |-----|----------------|----------------|
 | `Alt+Right` | Copy left → right | Copy left → base |
 | `Alt+Left` | Copy right → left | Copy right → base |
-| `Ctrl+Right` | Copy + next | Copy + next |
-| `Ctrl+Left` | Copy + next | Copy + next |
+| `Ctrl+Right` | Copy + advance to next diff | Copy + advance to next diff |
+| `Ctrl+Left` | Copy + advance to next diff | Copy + advance to next diff |
 
 ### Tab Management
 

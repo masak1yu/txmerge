@@ -15,138 +15,28 @@ struct MenuItem {
 /// Canonical menu item list -- used by both draw() and hit_test()
 fn menu_items() -> Vec<MenuItem> {
     vec![
-        MenuItem {
-            label: " ",
-            action: None,
-        },
-        MenuItem {
-            label: "\u{1F4C4}",
-            action: Some(MenuAction::New),
-        },
-        MenuItem {
-            label: " ",
-            action: None,
-        },
-        MenuItem {
-            label: "\u{1F4C2}",
-            action: Some(MenuAction::Open),
-        },
-        MenuItem {
-            label: " ",
-            action: None,
-        },
-        MenuItem {
-            label: "\u{1F4BE}",
-            action: Some(MenuAction::Save),
-        },
-        MenuItem {
-            label: " ",
-            action: None,
-        },
-        MenuItem {
-            label: "\u{1F504}",
-            action: Some(MenuAction::Refresh),
-        },
-        MenuItem {
-            label: " \u{2502} ",
-            action: None,
-        },
-        MenuItem {
-            label: "|<",
-            action: Some(MenuAction::FirstDiff),
-        },
-        MenuItem {
-            label: " ",
-            action: None,
-        },
-        MenuItem {
-            label: "<",
-            action: Some(MenuAction::PrevDiff),
-        },
-        MenuItem {
-            label: " ",
-            action: None,
-        },
-        MenuItem {
-            label: ">",
-            action: Some(MenuAction::NextDiff),
-        },
-        MenuItem {
-            label: " ",
-            action: None,
-        },
-        MenuItem {
-            label: ">|",
-            action: Some(MenuAction::LastDiff),
-        },
-        MenuItem {
-            label: " \u{2502} ",
-            action: None,
-        },
-        MenuItem {
-            label: "->",
-            action: Some(MenuAction::CopyLeftToRight),
-        },
-        MenuItem {
-            label: " ",
-            action: None,
-        },
-        MenuItem {
-            label: "<-",
-            action: Some(MenuAction::CopyRightToLeft),
-        },
-        MenuItem {
-            label: " \u{2502} ",
-            action: None,
-        },
-        MenuItem {
-            label: "->|",
-            action: Some(MenuAction::CopyLeftToRightNext),
-        },
-        MenuItem {
-            label: " ",
-            action: None,
-        },
-        MenuItem {
-            label: "|<-",
-            action: Some(MenuAction::CopyRightToLeftNext),
-        },
-        MenuItem {
-            label: " \u{2502} ",
-            action: None,
-        },
-        MenuItem {
-            label: "=>>",
-            action: Some(MenuAction::CopyAllLR),
-        },
-        MenuItem {
-            label: " ",
-            action: None,
-        },
-        MenuItem {
-            label: "<<=",
-            action: Some(MenuAction::CopyAllRL),
-        },
-        MenuItem {
-            label: " \u{2502} ",
-            action: None,
-        },
-        MenuItem {
-            label: "ws",
-            action: Some(MenuAction::ToggleWhitespace),
-        },
-        MenuItem {
-            label: " ",
-            action: None,
-        },
-        MenuItem {
-            label: "Aa",
-            action: Some(MenuAction::ToggleCase),
-        },
-        MenuItem {
-            label: " ",
-            action: None,
-        },
+        MenuItem { label: " New", action: Some(MenuAction::New) },
+        MenuItem { label: " ", action: None },
+        MenuItem { label: "Open", action: Some(MenuAction::Open) },
+        MenuItem { label: " ", action: None },
+        MenuItem { label: "Save", action: Some(MenuAction::Save) },
+        MenuItem { label: " ", action: None },
+        MenuItem { label: "Ref", action: Some(MenuAction::Refresh) },
+        MenuItem { label: " \u{2502} ", action: None },
+        MenuItem { label: "Prev", action: Some(MenuAction::PrevDiff) },
+        MenuItem { label: " ", action: None },
+        MenuItem { label: "Next", action: Some(MenuAction::NextDiff) },
+        MenuItem { label: " \u{2502} ", action: None },
+        MenuItem { label: "LtR", action: Some(MenuAction::CopyLeftToRight) },
+        MenuItem { label: " ", action: None },
+        MenuItem { label: "RtL", action: Some(MenuAction::CopyRightToLeft) },
+        MenuItem { label: " \u{2502} ", action: None },
+        MenuItem { label: "AllSel", action: Some(MenuAction::SelectAll) },
+        MenuItem { label: " \u{2502} ", action: None },
+        MenuItem { label: "ws", action: Some(MenuAction::ToggleWhitespace) },
+        MenuItem { label: " ", action: None },
+        MenuItem { label: "Aa", action: Some(MenuAction::ToggleCase) },
+        MenuItem { label: " ", action: None },
     ]
 }
 
@@ -190,10 +80,16 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
 
     let has_diff = tab.diff_count() > 0;
 
+    let is_three_way = tab.is_three_way;
     let items = menu_items();
     let spans: Vec<Span> = items
         .iter()
         .map(|item| {
+            let label = match item.action {
+                Some(MenuAction::CopyLeftToRight) if is_three_way => "LtM",
+                Some(MenuAction::CopyRightToLeft) if is_three_way => "RtM",
+                _ => item.label,
+            };
             let style = match item.action {
                 None => {
                     if item.label.contains('\u{2502}') {
@@ -223,6 +119,13 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                         active
                     }
                 }
+                Some(MenuAction::SelectAll) => {
+                    if tab.select_all {
+                        toggled_on
+                    } else {
+                        active
+                    }
+                }
                 Some(MenuAction::New) | Some(MenuAction::Open) | Some(MenuAction::Refresh) => {
                     active
                 }
@@ -234,7 +137,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                     }
                 }
             };
-            Span::styled(item.label, style)
+            Span::styled(label, style)
         })
         .collect();
 

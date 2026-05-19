@@ -173,8 +173,9 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             ]));
         }
 
-        f.render_widget(Paragraph::new(left_lines), left_inner);
-        f.render_widget(Paragraph::new(right_lines), right_inner);
+        let h = tab.h_scroll as u16;
+        f.render_widget(Paragraph::new(left_lines).scroll((0, h)), left_inner);
+        f.render_widget(Paragraph::new(right_lines).scroll((0, h)), right_inner);
 
         // Show cursor for editing
         if let Some((panel, source_line, cursor_col)) = edit_info {
@@ -192,9 +193,12 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                 } else {
                     cursor_col
                 };
-                let x = panel_rect.x + LINE_NO_WIDTH as u16 + display_col as u16;
-                let y = panel_rect.y + row_on_screen as u16;
-                f.set_cursor_position((x.min(panel_rect.x + panel_rect.width - 1), y));
+                let content_x = LINE_NO_WIDTH as u16 + display_col as u16;
+                if content_x >= h {
+                    let x = panel_rect.x + content_x - h;
+                    let y = panel_rect.y + row_on_screen as u16;
+                    f.set_cursor_position((x.min(panel_rect.x + panel_rect.width - 1), y));
+                }
             }
         }
         return;
@@ -290,10 +294,9 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         right_lines.push(right_span_line);
     }
 
-    let left_para = Paragraph::new(left_lines);
-    let right_para = Paragraph::new(right_lines);
-    f.render_widget(left_para, left_inner);
-    f.render_widget(right_para, right_inner);
+    let h = tab.h_scroll as u16;
+    f.render_widget(Paragraph::new(left_lines).scroll((0, h)), left_inner);
+    f.render_widget(Paragraph::new(right_lines).scroll((0, h)), right_inner);
 
     // Render cursor if editing
     if let Some((panel, source_line, display_line, cursor_col)) = edit_info {
@@ -323,9 +326,12 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             } else {
                 cursor_col
             };
-            let x = panel_rect.x + LINE_NO_WIDTH as u16 + display_col as u16;
-            let y = panel_rect.y + row_on_screen as u16;
-            f.set_cursor_position((x.min(panel_rect.x + panel_rect.width - 1), y));
+            let content_x = LINE_NO_WIDTH as u16 + display_col as u16;
+            if content_x >= h {
+                let x = panel_rect.x + content_x - h;
+                let y = panel_rect.y + row_on_screen as u16;
+                f.set_cursor_position((x.min(panel_rect.x + panel_rect.width - 1), y));
+            }
         }
     }
 }
