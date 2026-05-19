@@ -1,5 +1,6 @@
 use std::time::SystemTime;
 
+use chrono::{DateTime, Local};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -182,7 +183,7 @@ fn truncate_pad(s: &str, width: usize) -> String {
 fn fmt_time_opt(t: Option<SystemTime>, width: usize) -> String {
     match t {
         Some(st) => {
-            let s = format_utc(st);
+            let s = format_local(st);
             format!("{:<width$}", s)
         }
         None => format!("{:<width$}", "-"),
@@ -199,35 +200,9 @@ fn fmt_size_opt(size: Option<u64>, width: usize) -> String {
     }
 }
 
-fn format_utc(t: SystemTime) -> String {
-    use std::time::UNIX_EPOCH;
-    let secs = match t.duration_since(UNIX_EPOCH) {
-        Ok(d) => d.as_secs(),
-        Err(_) => return "----/-- --:--".to_string(),
-    };
-    let (year, month, day, hour, min) = civil_from_epoch(secs);
-    format!("{:04}-{:02}-{:02} {:02}:{:02}", year, month, day, hour, min)
-}
-
-/// Civil date/time from UNIX epoch seconds (UTC).
-/// Algorithm: http://howardhinnant.com/date_algorithms.html
-fn civil_from_epoch(secs: u64) -> (u32, u32, u32, u32, u32) {
-    let time_of_day = secs % 86400;
-    let h = (time_of_day / 3600) as u32;
-    let m = ((time_of_day % 3600) / 60) as u32;
-
-    let days = (secs / 86400) as i64;
-    let z = days + 719468;
-    let era = if z >= 0 { z } else { z - 146096 } / 146097;
-    let doe = (z - era * 146097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let mon = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    let year = (yoe as i64 + era * 400 + if mon <= 2 { 1 } else { 0 }) as u32;
-
-    (year, mon, day, h, m)
+fn format_local(t: SystemTime) -> String {
+    let dt: DateTime<Local> = t.into();
+    dt.format("%Y-%m-%d %H:%M").to_string()
 }
 
 fn format_size(bytes: u64) -> String {
