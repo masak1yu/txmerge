@@ -1,5 +1,7 @@
 # txmerge
 
+<img width="1477" height="752" alt="Image" src="https://github.com/user-attachments/assets/06e699e5-bac2-4763-b730-9a11eb0d46dc" />
+
 A TUI diff and merge tool written in Rust. Inspired by WinMerge/WinXMerge, providing side-by-side file comparison and 3-way merge in the terminal.
 
 ## Features
