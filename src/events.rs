@@ -280,6 +280,8 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         // === Scroll ===
         KeyCode::Char('j') | KeyCode::Down => app.scroll_down(1),
         KeyCode::Char('k') | KeyCode::Up => app.scroll_up(1),
+        KeyCode::Right if !ctrl && !alt => app.h_scroll_right(4),
+        KeyCode::Left if !ctrl && !alt => app.h_scroll_left(4),
         KeyCode::PageDown => app.scroll_down(20),
         KeyCode::PageUp => app.scroll_up(20),
         KeyCode::Char('g') => {
@@ -635,16 +637,11 @@ pub enum MenuAction {
     New,
     Open,
     Refresh,
-    FirstDiff,
     PrevDiff,
     NextDiff,
-    LastDiff,
     CopyLeftToRight,
     CopyRightToLeft,
-    CopyLeftToRightNext,
-    CopyRightToLeftNext,
-    CopyAllLR,
-    CopyAllRL,
+    SelectAll,
     ToggleWhitespace,
     ToggleCase,
     Save,
@@ -665,16 +662,11 @@ fn execute_menu_action(app: &mut App, action: MenuAction) {
         MenuAction::Save => {
             app.save_files();
         }
-        MenuAction::FirstDiff => app.first_diff(),
         MenuAction::PrevDiff => app.prev_diff(),
         MenuAction::NextDiff => app.next_diff(),
-        MenuAction::LastDiff => app.last_diff(),
         MenuAction::CopyLeftToRight => app.copy_left_to_right(),
         MenuAction::CopyRightToLeft => app.copy_right_to_left(),
-        MenuAction::CopyLeftToRightNext => app.copy_left_to_right_and_next(),
-        MenuAction::CopyRightToLeftNext => app.copy_right_to_left_and_next(),
-        MenuAction::CopyAllLR => app.copy_all_left_to_right(),
-        MenuAction::CopyAllRL => app.copy_all_right_to_left(),
+        MenuAction::SelectAll => app.toggle_select_all(),
         MenuAction::ToggleWhitespace => app.toggle_ignore_whitespace(),
         MenuAction::ToggleCase => app.toggle_ignore_case(),
     }

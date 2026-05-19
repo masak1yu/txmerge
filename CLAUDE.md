@@ -15,7 +15,7 @@ src/
 ├── events.rs            # Key + mouse event handling, MenuAction dispatch
 ├── ui/
 │   ├── mod.rs           # Layout + dialog overlays (open, save, close-tab confirm)
-│   ├── menu_bar.rs      # Unicode icon toolbar with mouse hit-test
+│   ├── menu_bar.rs      # Text-label toolbar with mouse hit-test
 │   ├── tab_bar.rs       # Tab bar rendering + mouse hit-test
 │   ├── diff_view.rs     # 2-way side-by-side diff rendering + raw text editing
 │   ├── three_way_view.rs # 3-way merge rendering (Left|Base|Right) + raw text editing
@@ -47,6 +47,8 @@ cargo run                                      # Blank screen, click or 'i' to e
 - **Edit state reset on recompute**: recompute_diff_inner clears edit_state to prevent stale display_line references.
 - **source_line clamping**: enter_edit_mode clamps source_line to panel's actual line count.
 - **3-way copy targets Base**: In 3-way mode, Alt+Right = Left→Base, Alt+Left = Right→Base.
+- **h_scroll**: Horizontal scroll offset per tab. Applied via `Paragraph::scroll((0, h_scroll))`. Reset on file open.
+- **select_all**: Bool per tab. When true, copy_left_to_right/right_to_left copies all diffs instead of current. Cleared after copy.
 
 ## Key Bindings
 
@@ -58,6 +60,7 @@ cargo run                                      # Blank screen, click or 'i' to e
 - `Ctrl+Z` / `Ctrl+Y` — Undo / Redo
 - `n` / `F8` — Next diff
 - `p` / `F7` — Previous diff
+- `→` / `←` — Horizontal scroll
 - `Alt+→` / `Alt+←` — Copy (2-way: L↔R, 3-way: L→Base / R→Base)
 - `Ctrl+→` / `Ctrl+←` — Copy and advance to next
 - `F5` — Refresh comparison

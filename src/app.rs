@@ -59,8 +59,10 @@ pub struct TabState {
     pub diff_options: DiffOptions,
     pub current_diff: i32,
     pub scroll_offset: usize,
+    pub h_scroll: usize,
     pub edit_state: Option<EditState>,
     pub has_unsaved_changes: bool,
+    pub select_all: bool,
     undo_stack: Vec<TextSnapshot>,
     redo_stack: Vec<TextSnapshot>,
 }
@@ -80,8 +82,10 @@ impl TabState {
             diff_options: DiffOptions::default(),
             current_diff: -1,
             scroll_offset: 0,
+            h_scroll: 0,
             edit_state: None,
             has_unsaved_changes: false,
+            select_all: false,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
         }
@@ -105,6 +109,7 @@ impl TabState {
         self.is_three_way = false;
         self.three_way_result = None;
         self.has_unsaved_changes = false;
+        self.h_scroll = 0;
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.recompute_diff();
@@ -120,6 +125,7 @@ impl TabState {
         self.is_three_way = true;
         self.diff_result = None;
         self.has_unsaved_changes = false;
+        self.h_scroll = 0;
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.recompute_diff();
@@ -286,6 +292,14 @@ impl TabState {
 
     pub fn scroll_up(&mut self, amount: usize) {
         self.scroll_offset = self.scroll_offset.saturating_sub(amount);
+    }
+
+    pub fn h_scroll_right(&mut self, amount: usize) {
+        self.h_scroll = self.h_scroll.saturating_add(amount);
+    }
+
+    pub fn h_scroll_left(&mut self, amount: usize) {
+        self.h_scroll = self.h_scroll.saturating_sub(amount);
     }
 
     fn scroll_to_current_diff(&mut self) {
@@ -596,6 +610,7 @@ impl TabState {
         self.base_path = None;
         self.is_three_way = is_three_way;
         self.has_unsaved_changes = false;
+        self.h_scroll = 0;
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.edit_state = None;
@@ -1173,12 +1188,30 @@ impl App {
         self.active_tab_mut().scroll_up(amount);
     }
 
+    pub fn h_scroll_right(&mut self, amount: usize) {
+        self.active_tab_mut().h_scroll_right(amount);
+    }
+
+    pub fn h_scroll_left(&mut self, amount: usize) {
+        self.active_tab_mut().h_scroll_left(amount);
+    }
+
     pub fn copy_left_to_right(&mut self) {
-        self.active_tab_mut().copy_left_to_right();
+        if self.active_tab().select_all {
+            self.active_tab_mut().copy_all_left_to_right();
+            self.active_tab_mut().select_all = false;
+        } else {
+            self.active_tab_mut().copy_left_to_right();
+        }
     }
 
     pub fn copy_right_to_left(&mut self) {
-        self.active_tab_mut().copy_right_to_left();
+        if self.active_tab().select_all {
+            self.active_tab_mut().copy_all_right_to_left();
+            self.active_tab_mut().select_all = false;
+        } else {
+            self.active_tab_mut().copy_right_to_left();
+        }
     }
 
     pub fn copy_left_to_right_and_next(&mut self) {
@@ -1189,12 +1222,9 @@ impl App {
         self.active_tab_mut().copy_right_to_left_and_next();
     }
 
-    pub fn copy_all_left_to_right(&mut self) {
-        self.active_tab_mut().copy_all_left_to_right();
-    }
-
-    pub fn copy_all_right_to_left(&mut self) {
-        self.active_tab_mut().copy_all_right_to_left();
+    pub fn toggle_select_all(&mut self) {
+        let tab = self.active_tab_mut();
+        tab.select_all = !tab.select_all;
     }
 
     pub fn toggle_ignore_whitespace(&mut self) {

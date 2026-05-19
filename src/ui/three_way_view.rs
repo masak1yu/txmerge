@@ -194,9 +194,10 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
             ]));
         }
 
-        f.render_widget(Paragraph::new(left_lines), left_inner);
-        f.render_widget(Paragraph::new(base_lines_render), base_inner);
-        f.render_widget(Paragraph::new(right_lines), right_inner);
+        let h = tab.h_scroll as u16;
+        f.render_widget(Paragraph::new(left_lines).scroll((0, h)), left_inner);
+        f.render_widget(Paragraph::new(base_lines_render).scroll((0, h)), base_inner);
+        f.render_widget(Paragraph::new(right_lines).scroll((0, h)), right_inner);
 
         // Cursor
         if let Some((panel, source_line, cursor_col)) = edit_info {
@@ -214,9 +215,12 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                 } else {
                     cursor_col
                 };
-                let x = panel_rect.x + LINE_NO_WIDTH as u16 + display_col as u16;
-                let y = panel_rect.y + row_on_screen as u16;
-                f.set_cursor_position((x.min(panel_rect.x + panel_rect.width - 1), y));
+                let content_x = LINE_NO_WIDTH as u16 + display_col as u16;
+                if content_x >= h {
+                    let x = panel_rect.x + content_x - h;
+                    let y = panel_rect.y + row_on_screen as u16;
+                    f.set_cursor_position((x.min(panel_rect.x + panel_rect.width - 1), y));
+                }
             }
         }
         return;
@@ -304,9 +308,10 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         right_lines.push(render_line(right_text, line.right_line_no, right_bg));
     }
 
-    f.render_widget(Paragraph::new(left_lines), left_inner);
-    f.render_widget(Paragraph::new(base_lines), base_inner);
-    f.render_widget(Paragraph::new(right_lines), right_inner);
+    let h = tab.h_scroll as u16;
+    f.render_widget(Paragraph::new(left_lines).scroll((0, h)), left_inner);
+    f.render_widget(Paragraph::new(base_lines).scroll((0, h)), base_inner);
+    f.render_widget(Paragraph::new(right_lines).scroll((0, h)), right_inner);
 
     // Render cursor if editing
     if app.mode == AppMode::Editing {
@@ -335,9 +340,12 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                 } else {
                     es.cursor_col
                 };
-                let x = panel_rect.x + LINE_NO_WIDTH as u16 + display_col as u16;
-                let y = panel_rect.y + row_on_screen as u16;
-                f.set_cursor_position((x.min(panel_rect.x + panel_rect.width - 1), y));
+                let content_x = LINE_NO_WIDTH as u16 + display_col as u16;
+                if content_x >= h {
+                    let x = panel_rect.x + content_x - h;
+                    let y = panel_rect.y + row_on_screen as u16;
+                    f.set_cursor_position((x.min(panel_rect.x + panel_rect.width - 1), y));
+                }
             }
         }
     }
