@@ -24,19 +24,27 @@ use app::App;
 struct Cli {
     /// Paths: <left> <right> (files or dirs for 2-way), <left> <base> <right> for 3-way
     files: Vec<PathBuf>,
+
+    /// Output path for merge result (git mergetool use). Ctrl+S writes base panel here.
+    #[arg(short, long, value_name = "PATH")]
+    output: Option<PathBuf>,
 }
 
-fn main() -> io::Result<()> {
+fn main() {
     let cli = Cli::parse();
 
     // Setup terminal
-    enable_raw_mode()?;
+    enable_raw_mode().expect("enable raw mode");
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture).expect("enter alternate screen");
     let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+    let mut terminal = Terminal::new(backend).expect("create terminal");
 
     let mut app = App::new();
+
+    if let Some(out) = cli.output {
+        app.output_path = Some(out);
+    }
 
     // Open files/directories if provided via CLI
     match cli.files.len() {
@@ -55,22 +63,28 @@ fn main() -> io::Result<()> {
             let right = cli.files[2].clone();
             app.active_tab_mut().open_files_3way(left, base, right);
         }
-        _ => {} // No files -- start with blank screen
+        _ => {}
     }
 
-    // Main loop
     let result = run_app(&mut terminal, &mut app);
 
     // Restore terminal
-    disable_raw_mode()?;
+    disable_raw_mode().expect("disable raw mode");
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
         DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
+    )
+    .expect("leave alternate screen");
+    terminal.show_cursor().expect("show cursor");
 
-    result
+    // Exit code: 1 if mergetool mode but user quit without saving
+    let exit_code = match result {
+        Err(_) => 1,
+        Ok(()) if app.output_path.is_some() && !app.output_saved => 1,
+        Ok(()) => 0,
+    };
+    std::process::exit(exit_code);
 }
 
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> io::Result<()> {

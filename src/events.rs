@@ -258,10 +258,11 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
     match key.code {
         // === Quit: Ctrl+Q ===
         KeyCode::Char('q') if ctrl => {
-            if app.any_unsaved() {
-                app.mode = AppMode::SaveConfirm;
-            } else {
+            // In mergetool mode, just exit (main.rs sets exit code from output_saved)
+            if app.output_path.is_some() || !app.any_unsaved() {
                 app.should_quit = true;
+            } else {
+                app.mode = AppMode::SaveConfirm;
             }
         }
 
@@ -295,7 +296,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         }
         // Save: Ctrl+S
         KeyCode::Char('s') if ctrl => {
-            app.save_files();
+            do_save(app);
         }
         // Refresh: F5, Ctrl+R
         KeyCode::F(5) => refresh_files(app),
@@ -398,6 +399,7 @@ fn handle_dir_compare_mode(app: &mut App, key: KeyEvent) {
         }
         KeyCode::PageDown if ctrl => app.next_tab(),
         KeyCode::PageUp if ctrl => app.prev_tab(),
+        KeyCode::Char('s') if ctrl => do_save(app),
         // Vertical navigation
         KeyCode::Down | KeyCode::Char('j') => app.dir_next(),
         KeyCode::Up | KeyCode::Char('k') => app.dir_prev(),
@@ -407,6 +409,15 @@ fn handle_dir_compare_mode(app: &mut App, key: KeyEvent) {
         // Open selected entry
         KeyCode::Enter => app.dir_open_selected(),
         _ => {}
+    }
+}
+
+/// Save: use direct write when --output is set (mergetool), otherwise open dialog.
+fn do_save(app: &mut App) {
+    if app.output_path.is_some() {
+        app.save_to_output();
+    } else {
+        app.save_files();
     }
 }
 
@@ -469,7 +480,7 @@ fn handle_editing_mode(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('s') if ctrl => {
             app.exit_edit_mode();
-            app.save_files();
+            do_save(app);
         }
         KeyCode::Char(c) if !ctrl && !alt => app.edit_insert_char(c),
         _ => {}
@@ -741,7 +752,7 @@ fn execute_menu_action(app: &mut App, action: MenuAction) {
             refresh_files(app);
         }
         MenuAction::Save => {
-            app.save_files();
+            do_save(app);
         }
         MenuAction::PrevDiff => app.prev_diff(),
         MenuAction::NextDiff => app.next_diff(),

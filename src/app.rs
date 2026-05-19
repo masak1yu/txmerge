@@ -1095,6 +1095,10 @@ pub struct App {
     pub should_quit: bool,
     pub status_message: Option<(String, std::time::Instant)>,
     pub new_file_pending: bool,
+    /// Output path for git mergetool mode (`--output`).
+    pub output_path: Option<PathBuf>,
+    /// True once the user has saved to output_path at least once.
+    pub output_saved: bool,
 }
 
 impl App {
@@ -1107,6 +1111,8 @@ impl App {
             should_quit: false,
             status_message: None,
             new_file_pending: false,
+            output_path: None,
+            output_saved: false,
         }
     }
 
@@ -1417,6 +1423,31 @@ impl App {
             }
         }
         None
+    }
+
+    /// Mergetool mode: write base (middle) panel directly to output_path.
+    /// Returns true on success.
+    pub fn save_to_output(&mut self) -> bool {
+        let path = match &self.output_path {
+            Some(p) => p.clone(),
+            None => return false,
+        };
+        let text = buf_to_text(&self.active_tab().base_buf);
+        match fs::write(&path, text) {
+            Ok(()) => {
+                self.output_saved = true;
+                self.active_tab_mut().has_unsaved_changes = false;
+                let name = path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.to_string_lossy().to_string());
+                self.set_status(&format!("Saved to {}", name));
+                true
+            }
+            Err(e) => {
+                self.set_status(&format!("Save failed: {}", e));
+                false
+            }
+        }
     }
 
     /// Start save flow — always opens file browser dialog for confirmation.
