@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::diff::dir_compare::scan_dirs;
+use crate::diff::git_diff::{extract_git_file, scan_git_diff};
 use crate::diff::engine::{DiffOptions, compute_diff};
 use crate::diff::three_way::compute_three_way_diff;
 use crate::file_browser::FileBrowser;
@@ -100,6 +101,15 @@ impl TabState {
 
     pub fn title(&self) -> String {
         if self.is_dir_compare {
+            if let Some(ref r) = self.dir_result {
+                if let Some(ref gc) = r.git_context {
+                    return if let Some(ref r2) = gc.ref2 {
+                        format!("{}..{}", gc.ref1, r2)
+                    } else {
+                        format!("{} (wt)", gc.ref1)
+                    };
+                }
+            }
             return self
                 .left_path
                 .as_ref()
@@ -1288,6 +1298,27 @@ impl App {
         self.active_tab_mut().open_dirs(left, right);
     }
 
+    pub fn open_git_diff(&mut self, repo: PathBuf, ref1: String, ref2: Option<String>) {
+        let result = scan_git_diff(&repo, &ref1, ref2.as_deref());
+        let tab = self.active_tab_mut();
+        tab.left_path = Some(repo.clone());
+        tab.right_path = Some(repo);
+        tab.base_path = None;
+        tab.left_buf.clear();
+        tab.right_buf.clear();
+        tab.base_buf.clear();
+        tab.diff_result = None;
+        tab.three_way_result = None;
+        tab.is_three_way = false;
+        tab.is_dir_compare = true;
+        tab.dir_result = Some(result);
+        tab.has_unsaved_changes = false;
+        tab.h_scroll = 0;
+        tab.scroll_offset = 0;
+        tab.undo_stack.clear();
+        tab.redo_stack.clear();
+    }
+
     pub fn dir_next(&mut self) {
         let tab = self.active_tab_mut();
         if let Some(ref mut r) = tab.dir_result {
@@ -1320,24 +1351,55 @@ impl App {
             None => return,
         };
         use crate::models::diff_line::DirEntryStatus;
-        let left_dir = dir_result.left_dir.clone();
-        let right_dir = dir_result.right_dir.clone();
         let rel = entry.rel_path.clone();
         let status = entry.status.clone();
 
-        let left_path = left_dir.join(&rel);
-        let right_path = right_dir.join(&rel);
+        if let Some(ref gc) = dir_result.git_context {
+            let repo = gc.repo.clone();
+            let ref1 = gc.ref1.clone();
+            let ref2 = gc.ref2.clone();
 
-        self.new_tab();
-        match status {
-            DirEntryStatus::LeftOnly => {
-                self.active_tab_mut().open_files(left_path, PathBuf::new());
+            self.new_tab();
+            match status {
+                DirEntryStatus::LeftOnly => {
+                    let left = extract_git_file(&repo, &ref1, &rel).unwrap_or_default();
+                    self.active_tab_mut().open_files(left, PathBuf::new());
+                }
+                DirEntryStatus::RightOnly => {
+                    let right = if let Some(ref r2) = ref2 {
+                        extract_git_file(&repo, r2, &rel).unwrap_or_default()
+                    } else {
+                        repo.join(&rel)
+                    };
+                    self.active_tab_mut().open_files(PathBuf::new(), right);
+                }
+                _ => {
+                    let left = extract_git_file(&repo, &ref1, &rel).unwrap_or_default();
+                    let right = if let Some(ref r2) = ref2 {
+                        extract_git_file(&repo, r2, &rel).unwrap_or_default()
+                    } else {
+                        repo.join(&rel)
+                    };
+                    self.active_tab_mut().open_files(left, right);
+                }
             }
-            DirEntryStatus::RightOnly => {
-                self.active_tab_mut().open_files(PathBuf::new(), right_path);
-            }
-            _ => {
-                self.active_tab_mut().open_files(left_path, right_path);
+        } else {
+            let left_dir = dir_result.left_dir.clone();
+            let right_dir = dir_result.right_dir.clone();
+            let left_path = left_dir.join(&rel);
+            let right_path = right_dir.join(&rel);
+
+            self.new_tab();
+            match status {
+                DirEntryStatus::LeftOnly => {
+                    self.active_tab_mut().open_files(left_path, PathBuf::new());
+                }
+                DirEntryStatus::RightOnly => {
+                    self.active_tab_mut().open_files(PathBuf::new(), right_path);
+                }
+                _ => {
+                    self.active_tab_mut().open_files(left_path, right_path);
+                }
             }
         }
     }

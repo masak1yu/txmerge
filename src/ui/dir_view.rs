@@ -39,11 +39,19 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         None => return,
     };
 
-    let title = format!(
-        " {} <-> {} ",
-        result.left_dir.to_string_lossy(),
-        result.right_dir.to_string_lossy()
-    );
+    let title = if let Some(ref gc) = result.git_context {
+        if let Some(ref r2) = gc.ref2 {
+            format!(" {}..{} ", gc.ref1, r2)
+        } else {
+            format!(" {} <-> working tree ", gc.ref1)
+        }
+    } else {
+        format!(
+            " {} <-> {} ",
+            result.left_dir.to_string_lossy(),
+            result.right_dir.to_string_lossy()
+        )
+    };
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)

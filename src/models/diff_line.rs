@@ -74,6 +74,14 @@ pub struct DirEntry {
     pub right_size: Option<u64>,
 }
 
+/// Git context attached to a DirCompareResult when in --git mode.
+#[derive(Debug, Clone)]
+pub struct GitContext {
+    pub repo: std::path::PathBuf,
+    pub ref1: String,
+    pub ref2: Option<String>, // None = working tree
+}
+
 #[derive(Debug, Clone)]
 pub struct DirCompareResult {
     pub left_dir: std::path::PathBuf,
@@ -81,4 +89,5 @@ pub struct DirCompareResult {
     pub entries: Vec<DirEntry>,
     pub selected: usize,
     pub scroll_offset: usize,
+    pub git_context: Option<GitContext>,
 }

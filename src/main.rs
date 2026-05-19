@@ -22,12 +22,21 @@ use app::App;
 #[derive(Parser)]
 #[command(name = "txmerge", version, about = "TUI diff and merge tool")]
 struct Cli {
-    /// Paths: <left> <right> (files or dirs for 2-way), <left> <base> <right> for 3-way
+    /// Paths: <left> <right> (files or dirs for 2-way), <left> <base> <right> for 3-way.
+    /// In --git mode: optional [ref1] [ref2] (default: HEAD vs working tree).
     files: Vec<PathBuf>,
 
     /// Output path for merge result (git mergetool use). Ctrl+S writes base panel here.
     #[arg(short, long, value_name = "PATH")]
     output: Option<PathBuf>,
+
+    /// Show git branch/commit comparison as a directory listing.
+    #[arg(long)]
+    git: bool,
+
+    /// Git repository path (default: current directory).
+    #[arg(long, value_name = "PATH", default_value = ".")]
+    repo: PathBuf,
 }
 
 fn main() {
@@ -47,23 +56,36 @@ fn main() {
     }
 
     // Open files/directories if provided via CLI
-    match cli.files.len() {
-        2 => {
-            let left = cli.files[0].clone();
-            let right = cli.files[1].clone();
-            if left.is_dir() && right.is_dir() {
-                app.open_dirs(left, right);
-            } else {
-                app.active_tab_mut().open_files(left, right);
+    if cli.git {
+        let repo = cli.repo.canonicalize().unwrap_or(cli.repo);
+        let (ref1, ref2) = match cli.files.len() {
+            0 => ("HEAD".to_string(), None),
+            1 => (cli.files[0].to_string_lossy().to_string(), None),
+            _ => (
+                cli.files[0].to_string_lossy().to_string(),
+                Some(cli.files[1].to_string_lossy().to_string()),
+            ),
+        };
+        app.open_git_diff(repo, ref1, ref2);
+    } else {
+        match cli.files.len() {
+            2 => {
+                let left = cli.files[0].clone();
+                let right = cli.files[1].clone();
+                if left.is_dir() && right.is_dir() {
+                    app.open_dirs(left, right);
+                } else {
+                    app.active_tab_mut().open_files(left, right);
+                }
             }
+            3 => {
+                let left = cli.files[0].clone();
+                let base = cli.files[1].clone();
+                let right = cli.files[2].clone();
+                app.active_tab_mut().open_files_3way(left, base, right);
+            }
+            _ => {}
         }
-        3 => {
-            let left = cli.files[0].clone();
-            let base = cli.files[1].clone();
-            let right = cli.files[2].clone();
-            app.active_tab_mut().open_files_3way(left, base, right);
-        }
-        _ => {}
     }
 
     let result = run_app(&mut terminal, &mut app);

@@ -52,6 +52,7 @@ pub fn scan_dirs(left: &Path, right: &Path) -> DirCompareResult {
         entries,
         selected: 0,
         scroll_offset: 0,
+        git_context: None,
     }
 }
 
