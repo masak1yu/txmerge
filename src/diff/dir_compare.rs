@@ -22,8 +22,16 @@ pub fn scan_dirs(left: &Path, right: &Path) -> DirCompareResult {
         let lp = left.join(&rel);
         let rp = right.join(&rel);
 
-        let (left_modified, left_size) = if in_left { file_meta(&lp) } else { (None, None) };
-        let (right_modified, right_size) = if in_right { file_meta(&rp) } else { (None, None) };
+        let (left_modified, left_size) = if in_left {
+            file_meta(&lp)
+        } else {
+            (None, None)
+        };
+        let (right_modified, right_size) = if in_right {
+            file_meta(&rp)
+        } else {
+            (None, None)
+        };
 
         let status = match (in_left, in_right) {
             (true, false) => DirEntryStatus::LeftOnly,

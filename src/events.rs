@@ -25,14 +25,18 @@ pub fn handle_events(app: &mut App) -> std::io::Result<bool> {
                 }
                 MouseEventKind::ScrollUp => {
                     if app.active_tab().is_dir_compare {
-                        for _ in 0..3 { app.dir_prev(); }
+                        for _ in 0..3 {
+                            app.dir_prev();
+                        }
                     } else {
                         app.scroll_up(3);
                     }
                 }
                 MouseEventKind::ScrollDown => {
                     if app.active_tab().is_dir_compare {
-                        for _ in 0..3 { app.dir_next(); }
+                        for _ in 0..3 {
+                            app.dir_next();
+                        }
                     } else {
                         app.scroll_down(3);
                     }
@@ -110,12 +114,15 @@ fn handle_mouse_click(app: &mut App, x: u16, y: u16) {
                     let scroll_offset = if let Some(ref r) = app.active_tab().dir_result {
                         if r.selected < r.scroll_offset {
                             r.selected
-                        } else if list_capacity > 0 && r.selected >= r.scroll_offset + list_capacity {
+                        } else if list_capacity > 0 && r.selected >= r.scroll_offset + list_capacity
+                        {
                             r.selected + 1 - list_capacity
                         } else {
                             r.scroll_offset
                         }
-                    } else { 0 };
+                    } else {
+                        0
+                    };
                     let clicked = scroll_offset + row;
                     if let Some(ref mut r) = app.active_tab_mut().dir_result {
                         if clicked < r.entries.len() {
@@ -380,7 +387,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
 
 fn handle_dir_compare_mode(app: &mut App, key: KeyEvent) {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    let alt  = key.modifiers.contains(KeyModifiers::ALT);
+    let alt = key.modifiers.contains(KeyModifiers::ALT);
 
     match key.code {
         // Quit
@@ -405,7 +412,7 @@ fn handle_dir_compare_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Up | KeyCode::Char('k') => app.dir_prev(),
         // Horizontal scroll
         KeyCode::Right if !ctrl && !alt => app.h_scroll_right(4),
-        KeyCode::Left  if !ctrl && !alt => app.h_scroll_left(4),
+        KeyCode::Left if !ctrl && !alt => app.h_scroll_left(4),
         // Open selected entry
         KeyCode::Enter => app.dir_open_selected(),
         _ => {}

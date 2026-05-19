@@ -26,11 +26,12 @@ pub fn reset_dir_list_rect() {
 // Column widths (fixed)
 const W_STATUS: usize = 4;
 const W_DATE: usize = 16; // "YYYY-MM-DD HH:MM"
-const W_SIZE: usize = 9;  // "1023.9 MB"
+const W_SIZE: usize = 9; // "1023.9 MB"
 const W_SEP: usize = 1;
 // path width = inner.width - W_STATUS - W_SEP - W_DATE - W_SEP - W_SIZE - W_SEP - W_DATE - W_SEP - W_SIZE - W_SEP
 // = inner.width - (4+1+16+1+9+1+16+1+9+1) = inner.width - 59
-const FIXED_COLS: usize = W_STATUS + W_SEP + W_DATE + W_SEP + W_SIZE + W_SEP + W_DATE + W_SEP + W_SIZE + W_SEP;
+const FIXED_COLS: usize =
+    W_STATUS + W_SEP + W_DATE + W_SEP + W_SIZE + W_SEP + W_DATE + W_SEP + W_SIZE + W_SEP;
 
 pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let tab = app.active_tab();
@@ -111,18 +112,15 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         let is_selected = i == result.selected;
 
         let (status_label, status_color) = match entry.status {
-            DirEntryStatus::Changed  => ("!= \u{2502}", Color::Rgb(220, 180, 80)),
+            DirEntryStatus::Changed => ("!= \u{2502}", Color::Rgb(220, 180, 80)),
             DirEntryStatus::LeftOnly => ("<  \u{2502}", Color::Rgb(100, 160, 240)),
-            DirEntryStatus::RightOnly=> (">  \u{2502}", Color::Rgb(100, 200, 130)),
-            DirEntryStatus::Equal    => ("== \u{2502}", Color::Rgb(80, 80, 80)),
+            DirEntryStatus::RightOnly => (">  \u{2502}", Color::Rgb(100, 200, 130)),
+            DirEntryStatus::Equal => ("== \u{2502}", Color::Rgb(80, 80, 80)),
         };
 
-        let path_str = truncate_pad(
-            &entry.rel_path.to_string_lossy(),
-            path_width,
-        );
-        let left_date  = fmt_time_opt(entry.left_modified, W_DATE);
-        let left_size  = fmt_size_opt(entry.left_size, W_SIZE);
+        let path_str = truncate_pad(&entry.rel_path.to_string_lossy(), path_width);
+        let left_date = fmt_time_opt(entry.left_modified, W_DATE);
+        let left_size = fmt_size_opt(entry.left_size, W_SIZE);
         let right_date = fmt_time_opt(entry.right_modified, W_DATE);
         let right_size = fmt_size_opt(entry.right_size, W_SIZE);
 
@@ -133,7 +131,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         };
 
         let status_style = Style::default().fg(status_color).bg(bg);
-        let text_style   = Style::default().fg(text_fg).bg(bg);
+        let text_style = Style::default().fg(text_fg).bg(bg);
 
         let line = build_row(
             status_label,

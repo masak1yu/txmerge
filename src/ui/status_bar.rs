@@ -23,12 +23,26 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let diff_info = if tab.is_dir_compare {
         if let Some(ref r) = tab.dir_result {
             use crate::models::diff_line::DirEntryStatus;
-            let changed = r.entries.iter().filter(|e| e.status == DirEntryStatus::Changed).count();
-            let left_only = r.entries.iter().filter(|e| e.status == DirEntryStatus::LeftOnly).count();
-            let right_only = r.entries.iter().filter(|e| e.status == DirEntryStatus::RightOnly).count();
+            let changed = r
+                .entries
+                .iter()
+                .filter(|e| e.status == DirEntryStatus::Changed)
+                .count();
+            let left_only = r
+                .entries
+                .iter()
+                .filter(|e| e.status == DirEntryStatus::LeftOnly)
+                .count();
+            let right_only = r
+                .entries
+                .iter()
+                .filter(|e| e.status == DirEntryStatus::RightOnly)
+                .count();
             format!(
                 "Dir compare | Changed:{} LeftOnly:{} RightOnly:{} | {}/{} | Enter:open",
-                changed, left_only, right_only,
+                changed,
+                left_only,
+                right_only,
                 r.selected + 1,
                 r.entries.len()
             )
@@ -117,7 +131,8 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         Line::from(vec![Span::styled(" ", bg), Span::styled(msg, green)])
     } else {
         let mergetool_info = app.output_path.as_ref().map(|p| {
-            let name = p.file_name()
+            let name = p
+                .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| p.to_string_lossy().to_string());
             let saved = if app.output_saved { " [saved]" } else { "" };

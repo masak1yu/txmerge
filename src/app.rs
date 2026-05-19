@@ -2,12 +2,12 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::diff::dir_compare::scan_dirs;
-use crate::diff::git_diff::{extract_git_file, scan_git_diff};
 use crate::diff::engine::{DiffOptions, compute_diff};
+use crate::diff::git_diff::{extract_git_file, scan_git_diff};
 use crate::diff::three_way::compute_three_way_diff;
 use crate::file_browser::FileBrowser;
 use crate::models::diff_line::{
-    DirCompareResult, DiffResult, LineStatus, ThreeWayResult, ThreeWayStatus,
+    DiffResult, DirCompareResult, LineStatus, ThreeWayResult, ThreeWayStatus,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1499,7 +1499,8 @@ impl App {
             Ok(()) => {
                 self.output_saved = true;
                 self.active_tab_mut().has_unsaved_changes = false;
-                let name = path.file_name()
+                let name = path
+                    .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| path.to_string_lossy().to_string());
                 self.set_status(&format!("Saved to {}", name));

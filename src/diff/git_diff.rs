@@ -11,7 +11,13 @@ pub fn scan_git_diff(repo: &Path, ref1: &str, ref2: Option<&str>) -> DirCompareR
     };
 
     let output = Command::new("git")
-        .args(["-C", &repo.to_string_lossy(), "diff", "--name-status", &range])
+        .args([
+            "-C",
+            &repo.to_string_lossy(),
+            "diff",
+            "--name-status",
+            &range,
+        ])
         .output()
         .unwrap_or_else(|_| std::process::Output {
             status: std::process::ExitStatus::default(),
