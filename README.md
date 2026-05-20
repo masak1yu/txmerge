@@ -68,6 +68,14 @@ Then use with:
 git difftool HEAD~1 HEAD -- path/to/file.rs
 ```
 
+For directory-level comparison, use `--dir-diff`:
+
+```bash
+git difftool --dir-diff HEAD~1 HEAD
+```
+
+This opens txmerge with two temporary directories containing all changed files, letting you browse and open individual diffs from the directory view.
+
 ### As git mergetool
 
 Add to `~/.gitconfig`:
